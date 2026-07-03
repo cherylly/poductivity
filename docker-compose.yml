@@ -1,0 +1,21 @@
+version: "3.8"
+services:
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/app/data
+    env_file:
+      - .env
+    restart: unless-stopped
+    command: python -m src.cli serve
+
+  scheduler:
+    build: .
+    volumes:
+      - ./data:/app/data
+    env_file:
+      - .env
+    restart: unless-stopped
+    command: python -c "from src.scheduler import start_scheduler; start_scheduler()"

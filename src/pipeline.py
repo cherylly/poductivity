@@ -1,0 +1,229 @@
+"""Core pipeline: orchestrates fetch → summarize → store → deliver."""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+from datetime import date, datetime, timedelta
+
+from sqlalchemy import and_
+
+from src.config import settings
+from src.delivery.email import send_daily_digest
+from src.fetchers.podcast import PodcastFetcher
+from src.fetchers.substack import SubstackFetcher
+from src.fetchers.youtube import YouTubeFetcher
+from src.models import DailyDigest, Entry, Source, Summary, get_session, init_db
+from src.summarizer.llm import generate_summary
+
+logger = logging.getLogger(__name__)
+
+FETCHERS = {
+    "substack": SubstackFetcher(),
+    "youtube": YouTubeFetcher(),
+    "podcast": PodcastFetcher(),
+}
+
+
+async def run_daily_pipeline():
+    """Execute the full daily content processing pipeline."""
+    logger.info("=== Starting daily pipeline ===")
+    init_db()
+
+    session = get_session()
+    try:
+        # Step 1: Fetch new content from all active sources
+        new_entries = await fetch_all_sources(session)
+        logger.info(f"Fetched {len(new_entries)} new entries")
+
+        # Step 2: Also pick up any previously pending entries
+        pending = (
+            session.query(Entry)
+            .filter(Entry.status.in_(["pending", "summarizing"]))
+            .filter(Entry.raw_text.isnot(None))
+            .all()
+        )
+        entries_to_summarize = list({e.id: e for e in new_entries + pending}.values())
+
+        # Step 3: Generate summaries
+        summarized = await summarize_entries(session, entries_to_summarize)
+        logger.info(f"Summarized {summarized} entries")
+
+        # Step 4: Create daily digest record
+        done_entries = (
+            session.query(Entry)
+            .filter(Entry.status == "done")
+            .filter(Entry.summary.has())
+            .order_by(Entry.published_at.desc())
+            .limit(50)
+            .all()
+        )
+        digest = create_daily_digest(session, done_entries)
+
+        # Step 5: Send email
+        if digest and done_entries:
+            send_digest_email(session, digest)
+
+        session.commit()
+        logger.info("=== Daily pipeline completed ===")
+
+    except Exception as e:
+        session.rollback()
+        logger.error(f"Pipeline failed: {e}", exc_info=True)
+        raise
+    finally:
+        session.close()
+
+
+async def fetch_all_sources(session) -> list[Entry]:
+    """Fetch new entries from all active sources."""
+    sources = session.query(Source).filter(Source.active == True).all()
+    all_new_entries = []
+
+    for source in sources:
+        try:
+            fetcher = FETCHERS.get(source.platform)
+            if not fetcher:
+                logger.warning(f"No fetcher for platform: {source.platform}")
+                continue
+
+            # Find the latest entry we already have for this source
+            latest = (
+                session.query(Entry)
+                .filter(Entry.source_id == source.id)
+                .order_by(Entry.published_at.desc())
+                .first()
+            )
+            since = latest.published_at if latest else None
+
+            rss_url = source.rss_url or source.url
+            fetched = await fetcher.fetch_new_entries(rss_url, since=since)
+
+            for item in fetched:
+                # Skip if already exists (by URL)
+                existing = session.query(Entry).filter(Entry.url == item.url).first()
+                if existing:
+                    continue
+
+                entry = Entry(
+                    source_id=source.id,
+                    title=item.title,
+                    url=item.url,
+                    published_at=item.published_at,
+                    content_type=item.content_type,
+                    raw_text=item.raw_text,
+                    status="pending" if not item.raw_text else "summarizing",
+                )
+                session.add(entry)
+                session.flush()
+                all_new_entries.append(entry)
+
+        except Exception as e:
+            logger.error(f"Failed to fetch source '{source.name}': {e}")
+            continue
+
+    session.commit()
+    return all_new_entries
+
+
+async def summarize_entries(session, entries: list[Entry]) -> int:
+    """Generate summaries for entries that have raw text."""
+    count = 0
+
+    for entry in entries:
+        if not entry.raw_text:
+            if entry.content_type == "podcast":
+                entry.status = "pending"  # needs transcription first
+            else:
+                entry.status = "failed"
+                entry.error_message = "No text content available"
+            continue
+
+        try:
+            entry.status = "summarizing"
+            session.commit()
+
+            source = session.query(Source).get(entry.source_id)
+            result = await generate_summary(
+                text=entry.raw_text,
+                title=entry.title,
+                content_type=entry.content_type,
+                source_name=source.name if source else "",
+            )
+
+            if result:
+                summary = Summary(
+                    entry_id=entry.id,
+                    thesis=result["thesis"],
+                    conclusion=result["conclusion"],
+                    word_count=len(result["thesis"]) + sum(
+                        len(p.get("text", "")) for p in result["key_points"]
+                    ),
+                )
+                summary.set_key_points(result["key_points"])
+                summary.set_tags(result.get("tags", []))
+                session.add(summary)
+                entry.status = "done"
+                count += 1
+            else:
+                entry.status = "failed"
+                entry.error_message = "LLM summary generation returned None"
+
+        except Exception as e:
+            entry.status = "failed"
+            entry.error_message = str(e)
+            logger.error(f"Failed to summarize '{entry.title}': {e}")
+
+    session.commit()
+    return count
+
+
+def create_daily_digest(session, entries: list[Entry]) -> DailyDigest | None:
+    """Create or update today's digest record."""
+    today = date.today()
+
+    digest = session.query(DailyDigest).filter(DailyDigest.digest_date == today).first()
+    if not digest:
+        digest = DailyDigest(digest_date=today)
+        session.add(digest)
+
+    entry_ids = [e.id for e in entries if e.status == "done"]
+    digest.set_entry_ids(entry_ids)
+    session.commit()
+    return digest
+
+
+def send_digest_email(session, digest: DailyDigest):
+    """Send the daily digest email."""
+    entry_ids = digest.get_entry_ids()
+    if not entry_ids:
+        return
+
+    entries_data = []
+    for entry_id in entry_ids:
+        entry = session.query(Entry).get(entry_id)
+        if not entry:
+            continue
+        source = session.query(Source).get(entry.source_id)
+        summary_data = None
+        if entry.summary:
+            summary_data = {
+                "thesis": entry.summary.thesis,
+                "key_points": entry.summary.get_key_points(),
+                "conclusion": entry.summary.conclusion,
+            }
+        entries_data.append({
+            "id": entry.id,
+            "title": entry.title,
+            "url": entry.url,
+            "content_type": entry.content_type,
+            "source_name": source.name if source else "Unknown",
+            "summary": summary_data,
+        })
+
+    date_str = digest.digest_date.strftime("%b %d, %Y")
+    success = send_daily_digest(date_str, entries_data)
+    if success:
+        digest.email_sent = True
+        session.commit()

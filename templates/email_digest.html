@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Daily Content Digest - {{ date }}</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background-color: #f5f5f5;
+      margin: 0;
+      padding: 20px;
+      color: #333;
+    }
+    .container {
+      max-width: 640px;
+      margin: 0 auto;
+      background: #fff;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    .header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      padding: 32px 24px;
+      text-align: center;
+      color: #fff;
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 600;
+    }
+    .header .meta {
+      margin-top: 8px;
+      font-size: 14px;
+      opacity: 0.85;
+    }
+    .content {
+      padding: 24px;
+    }
+    .card {
+      border: 1px solid #e8e8e8;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 16px;
+      transition: box-shadow 0.2s;
+    }
+    .card:hover {
+      box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+    }
+    .card-header {
+      display: flex;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      margin-right: 8px;
+    }
+    .badge-article { background: #e3f2fd; color: #1565c0; }
+    .badge-video { background: #fce4ec; color: #c62828; }
+    .badge-podcast { background: #e8f5e9; color: #2e7d32; }
+    .card h3 {
+      margin: 0 0 8px;
+      font-size: 16px;
+      line-height: 1.4;
+    }
+    .card h3 a {
+      color: #333;
+      text-decoration: none;
+    }
+    .card h3 a:hover {
+      color: #667eea;
+    }
+    .thesis {
+      font-size: 14px;
+      color: #555;
+      margin-bottom: 10px;
+      line-height: 1.5;
+    }
+    .key-points {
+      list-style: none;
+      padding: 0;
+      margin: 0 0 12px;
+    }
+    .key-points li {
+      font-size: 13px;
+      color: #666;
+      padding: 4px 0 4px 16px;
+      position: relative;
+      line-height: 1.4;
+    }
+    .key-points li::before {
+      content: "•";
+      position: absolute;
+      left: 0;
+      color: #667eea;
+      font-weight: bold;
+    }
+    .view-more {
+      display: inline-block;
+      font-size: 13px;
+      color: #667eea;
+      text-decoration: none;
+      font-weight: 500;
+    }
+    .view-more:hover {
+      text-decoration: underline;
+    }
+    .footer {
+      padding: 16px 24px;
+      text-align: center;
+      font-size: 12px;
+      color: #999;
+      border-top: 1px solid #f0f0f0;
+    }
+    .footer a {
+      color: #667eea;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>📬 Your Daily Content Digest</h1>
+      <div class="meta">{{ date }} · {{ entries|length }} new item{{ 's' if entries|length != 1 else '' }}</div>
+    </div>
+    <div class="content">
+      {% for entry in entries %}
+      <div class="card">
+        <div class="card-header">
+          {% if entry.content_type == 'article' %}
+          <span class="badge badge-article">📝 Article</span>
+          {% elif entry.content_type == 'video' %}
+          <span class="badge badge-video">🎬 Video</span>
+          {% elif entry.content_type == 'podcast' %}
+          <span class="badge badge-podcast">🎙️ Podcast</span>
+          {% endif %}
+          <span style="font-size: 12px; color: #999;">{{ entry.source_name }}</span>
+        </div>
+        <h3><a href="{{ entry.url }}">{{ entry.title }}</a></h3>
+        {% if entry.summary %}
+        <div class="thesis">💡 {{ entry.summary.thesis }}</div>
+        <ul class="key-points">
+          {% for point in entry.summary.key_points[:2] %}
+          <li>{{ point.text }}{% if point.timestamp %} <span style="color:#999">[{{ point.timestamp }}]</span>{% endif %}</li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+        <a class="view-more" href="{{ web_base_url }}/entry/{{ entry.id }}">View full summary →</a>
+      </div>
+      {% endfor %}
+    </div>
+    <div class="footer">
+      <a href="{{ web_base_url }}">Open in browser</a> · <a href="{{ web_base_url }}/sources">Manage subscriptions</a>
+    </div>
+  </div>
+</body>
+</html>

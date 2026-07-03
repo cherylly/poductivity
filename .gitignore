@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.env
+data/*.db
+data/*.mp3
+data/*.wav
+data/*.m4a
+.venv/
+venv/
+*.log
+node_modules/
+Untitled
