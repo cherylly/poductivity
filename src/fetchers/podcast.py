@@ -43,19 +43,39 @@ class PodcastFetcher(BaseFetcher):
                 continue
 
             audio_url = self._extract_audio_url(item)
+            raw_text = self._extract_description(item)
             entries.append(
                 FetchedEntry(
                     title=item.get("title", "Untitled"),
                     url=item.get("link", ""),
                     published_at=published,
                     content_type="podcast",
-                    raw_text=None,  # will be filled after transcription
+                    raw_text=raw_text,
                     audio_url=audio_url,
                 )
             )
 
         logger.info(f"Found {len(entries)} new podcast entries")
         return entries
+
+    def _extract_description(self, item) -> str | None:
+        """Extract episode description/show notes as fallback text content."""
+        from bs4 import BeautifulSoup
+
+        content = ""
+        if "content" in item and item.content:
+            content = item.content[0].get("value", "")
+        elif hasattr(item, "summary") and item.summary:
+            content = item.summary
+        elif hasattr(item, "description") and item.description:
+            content = item.description
+
+        if content:
+            soup = BeautifulSoup(content, "html.parser")
+            text = soup.get_text(separator="\n", strip=True)
+            if len(text) > 50:
+                return f"[Episode description]\n{text}"
+        return None
 
     def _extract_audio_url(self, item) -> str | None:
         """Extract audio URL from RSS enclosure."""

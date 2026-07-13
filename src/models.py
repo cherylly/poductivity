@@ -34,7 +34,7 @@ class Source(Base):
     active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    entries = relationship("Entry", back_populates="source")
+    entries = relationship("Entry", back_populates="source", cascade="all, delete-orphan")
 
 
 class Entry(Base):
@@ -47,13 +47,14 @@ class Entry(Base):
     published_at = Column(DateTime)
     content_type = Column(String(50), nullable=False)  # article / video / podcast
     raw_text = Column(Text)
+    audio_url = Column(String(2048))
     status = Column(String(50), default="pending")  # pending/transcribing/summarizing/done/failed
     error_message = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     source = relationship("Source", back_populates="entries")
-    summary = relationship("Summary", back_populates="entry", uselist=False)
-    bookmark = relationship("Bookmark", back_populates="entry", uselist=False)
+    summary = relationship("Summary", back_populates="entry", uselist=False, cascade="all, delete-orphan")
+    bookmark = relationship("Bookmark", back_populates="entry", uselist=False, cascade="all, delete-orphan")
 
 
 class Summary(Base):

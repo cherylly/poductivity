@@ -113,6 +113,7 @@ async def fetch_all_sources(session) -> list[Entry]:
                     published_at=item.published_at,
                     content_type=item.content_type,
                     raw_text=item.raw_text,
+                    audio_url=getattr(item, "audio_url", None),
                     status="pending" if not item.raw_text else "summarizing",
                 )
                 session.add(entry)
