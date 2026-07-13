@@ -11,16 +11,17 @@ from src.config import settings
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """You are a professional content summarization assistant. Your job is to produce structured summaries that capture the essence of content efficiently.
+SYSTEM_PROMPT = """You are an expert content analyst who produces comprehensive, detailed summaries. Your summaries should capture ALL important ideas, frameworks, examples, and actionable advice from the source material. A reader should be able to understand the full depth of the content from your summary alone.
 
 Rules:
-1. Be concise but preserve key insights
+1. Be thorough — extract EVERY meaningful insight, not just the top 3-5
 2. For interview/conversation content, attribute points to speakers when identifiable
 3. For timestamped content, include relevant timestamps
-4. Output valid JSON only, no markdown wrapping
-5. Write in the same language as the source content"""
+4. Preserve specific examples, numbers, frameworks, and actionable tactics
+5. Output valid JSON only, no markdown wrapping
+6. Write in the same language as the source content"""
 
-SUMMARIZE_PROMPT_TEMPLATE = """Summarize the following {content_type} content.
+SUMMARIZE_PROMPT_TEMPLATE = """Produce a comprehensive summary of the following {content_type} content.
 
 Title: {title}
 Source: {source_name}
@@ -30,26 +31,33 @@ Content:
 
 ---
 
-Generate a structured summary in JSON format:
+Generate a detailed structured summary in JSON format:
 {{
-  "thesis": "Core argument or main message in 1-2 sentences",
+  "thesis": "Core argument or main message in 2-4 sentences. Include the context and why it matters.",
   "key_points": [
     {{
+      "topic": "Short topic label for this point",
       "speaker": "Speaker name if identifiable, otherwise null",
-      "text": "Key insight or argument",
+      "text": "Detailed explanation of this insight, including specific examples, data, or frameworks mentioned. Be thorough — 2-4 sentences per point.",
       "timestamp": "MM:SS if available, otherwise null"
     }}
   ],
-  "conclusion": "One sentence takeaway or action item for the reader",
-  "tags": ["topic1", "topic2", "topic3"]
+  "actionable_takeaways": [
+    "Specific, concrete action the reader can take immediately"
+  ],
+  "conclusion": "2-3 sentence synthesis of the overall message and its implications for the reader",
+  "tags": ["topic1", "topic2", "topic3", "topic4", "topic5"]
 }}
 
 Requirements:
-- Extract 3-5 key points maximum
-- Each key point should be a complete, standalone insight
-- Tags should be 2-4 topic keywords
-- Keep thesis under 50 words
-- Keep each key point under 40 words"""
+- Extract 8-15 key points (more for longer content, fewer for shorter)
+- Each key point should be detailed (2-4 sentences), preserving specific examples, numbers, and frameworks
+- Include 3-5 actionable takeaways that the reader can apply immediately
+- Tags should be 4-6 topic keywords
+- Thesis should fully set the context (2-4 sentences)
+- Conclusion should synthesize the overall message (2-3 sentences)
+- For podcasts/interviews: capture each speaker's unique perspective
+- For tutorials/how-to: preserve step-by-step details and specific techniques"""
 
 
 async def generate_summary(

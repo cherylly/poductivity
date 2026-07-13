@@ -149,6 +149,7 @@ function EntryDetail() {
             <ul className="keypoints">
               {entry.summary.key_points.map((point, i) => (
                 <li key={i} className="keypoint">
+                  {point.topic && <strong className="point-topic">{point.topic}</strong>}
                   {point.speaker && <span className="speaker">{point.speaker}</span>}
                   <span className="point-text">{point.text}</span>
                   {point.timestamp && (
@@ -166,8 +167,19 @@ function EntryDetail() {
             </ul>
           </section>
 
+          {entry.summary.actionable_takeaways?.length > 0 && (
+            <section className="takeaways-section">
+              <h2>Actionable Takeaways</h2>
+              <ul className="takeaways">
+                {entry.summary.actionable_takeaways.map((t, i) => (
+                  <li key={i} className="takeaway-item">{t}</li>
+                ))}
+              </ul>
+            </section>
+          )}
+
           <section className="conclusion-section">
-            <h2>Takeaway</h2>
+            <h2>Conclusion</h2>
             <p className="conclusion">{entry.summary.conclusion}</p>
           </section>
 

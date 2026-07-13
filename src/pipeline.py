@@ -160,9 +160,12 @@ async def summarize_entries(session, entries: list[Entry]) -> int:
                     conclusion=result["conclusion"],
                     word_count=len(result["thesis"]) + sum(
                         len(p.get("text", "")) for p in result["key_points"]
+                    ) + sum(
+                        len(t) for t in result.get("actionable_takeaways", [])
                     ),
                 )
                 summary.set_key_points(result["key_points"])
+                summary.set_actionable_takeaways(result.get("actionable_takeaways", []))
                 summary.set_tags(result.get("tags", []))
                 session.add(summary)
                 entry.status = "done"

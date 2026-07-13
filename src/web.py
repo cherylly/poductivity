@@ -40,6 +40,7 @@ class SourceResponse(BaseModel):
 
 
 class KeyPoint(BaseModel):
+    topic: Optional[str] = None
     speaker: Optional[str] = None
     text: str
     timestamp: Optional[str] = None
@@ -48,6 +49,7 @@ class KeyPoint(BaseModel):
 class SummaryResponse(BaseModel):
     thesis: str
     key_points: List[KeyPoint]
+    actionable_takeaways: List[str] = []
     conclusion: str
     tags: List[str]
 
@@ -247,6 +249,7 @@ def _entry_to_response(session, entry: Entry) -> EntryResponse:
         summary_data = SummaryResponse(
             thesis=entry.summary.thesis,
             key_points=[KeyPoint(**p) for p in entry.summary.get_key_points()],
+            actionable_takeaways=entry.summary.get_actionable_takeaways(),
             conclusion=entry.summary.conclusion,
             tags=entry.summary.get_tags(),
         )

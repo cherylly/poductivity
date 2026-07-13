@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     llm_base_url: str = "https://ai-coding-ali.deeproute.cn/v1"
     llm_model: str = "glm-5.1"
     llm_timeout: int = 120
-    llm_max_tokens: int = 2000
+    llm_max_tokens: int = 4096
 
     # SMTP
     smtp_host: str = "smtp.gmail.com"

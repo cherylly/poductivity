@@ -65,6 +65,7 @@ class Summary(Base):
     thesis = Column(Text, nullable=False)
     key_points = Column(Text, nullable=False)  # JSON array
     conclusion = Column(Text, nullable=False)
+    actionable_takeaways = Column(Text)  # JSON array
     tags = Column(Text)  # JSON array
     word_count = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -76,6 +77,12 @@ class Summary(Base):
 
     def set_key_points(self, points: list[dict]):
         self.key_points = json.dumps(points, ensure_ascii=False)
+
+    def get_actionable_takeaways(self) -> list[str]:
+        return json.loads(self.actionable_takeaways) if self.actionable_takeaways else []
+
+    def set_actionable_takeaways(self, takeaways: list[str]):
+        self.actionable_takeaways = json.dumps(takeaways, ensure_ascii=False)
 
     def get_tags(self) -> list[str]:
         return json.loads(self.tags) if self.tags else []
