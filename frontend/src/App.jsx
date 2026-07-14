@@ -67,7 +67,7 @@ function todayStr() {
 }
 
 function DigestList() {
-  const { data: entries, loading } = useFetch(`${API}/entries?limit=200`)
+  const { data: entries, loading } = useFetch(`${API}/entries?limit=200&lite=true`)
 
   if (loading) return <div className="loading">Fetching today&rsquo;s edition&hellip;</div>
 
@@ -96,7 +96,7 @@ function DigestList() {
 }
 
 function Archive() {
-  const { data: entries, loading } = useFetch(`${API}/entries?limit=500`)
+  const { data: entries, loading } = useFetch(`${API}/entries?limit=500&lite=true`)
   const navigate = useNavigate()
 
   if (loading) return <div className="loading">Loading archive&hellip;</div>
@@ -136,7 +136,7 @@ function Archive() {
 
 function ArchiveDay() {
   const { date } = useParams()
-  const { data: entries, loading } = useFetch(`${API}/entries?limit=500`)
+  const { data: entries, loading } = useFetch(`${API}/entries?limit=500&lite=true`)
 
   if (loading) return <div className="loading">Loading&hellip;</div>
 

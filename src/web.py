@@ -182,14 +182,14 @@ async def get_entry(entry_id: int):
 
 
 @app.get("/api/entries", response_model=List[EntryResponse])
-async def list_entries(limit: int = 20, offset: int = 0, status: Optional[str] = None):
+async def list_entries(limit: int = 20, offset: int = 0, status: Optional[str] = None, lite: bool = False):
     session = get_session()
     try:
         query = session.query(Entry).order_by(Entry.published_at.desc())
         if status:
             query = query.filter(Entry.status == status)
         entries = query.offset(offset).limit(limit).all()
-        return [_entry_to_response(session, e) for e in entries]
+        return [_entry_to_response(session, e, lite=lite) for e in entries]
     finally:
         session.close()
 
@@ -244,17 +244,26 @@ async def list_bookmarks():
 
 # --- Helpers ---
 
-def _entry_to_response(session, entry: Entry) -> EntryResponse:
+def _entry_to_response(session, entry: Entry, lite: bool = False) -> EntryResponse:
     source = session.query(Source).get(entry.source_id)
     summary_data = None
     if entry.summary:
-        summary_data = SummaryResponse(
-            thesis=entry.summary.thesis,
-            key_points=[KeyPoint(**p) for p in entry.summary.get_key_points()],
-            actionable_takeaways=entry.summary.get_actionable_takeaways(),
-            conclusion=entry.summary.conclusion,
-            tags=entry.summary.get_tags(),
-        )
+        if lite:
+            summary_data = SummaryResponse(
+                thesis=entry.summary.thesis,
+                key_points=[],
+                actionable_takeaways=[],
+                conclusion="",
+                tags=entry.summary.get_tags(),
+            )
+        else:
+            summary_data = SummaryResponse(
+                thesis=entry.summary.thesis,
+                key_points=[KeyPoint(**p) for p in entry.summary.get_key_points()],
+                actionable_takeaways=entry.summary.get_actionable_takeaways(),
+                conclusion=entry.summary.conclusion,
+                tags=entry.summary.get_tags(),
+            )
 
     bookmarked = session.query(Bookmark).filter(Bookmark.entry_id == entry.id).first() is not None
 

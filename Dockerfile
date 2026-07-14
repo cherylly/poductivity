@@ -1,7 +1,7 @@
 FROM node:20-slim AS frontend
 WORKDIR /app
 COPY frontend/package*.json frontend/
-RUN cd frontend && npm ci
+RUN cd frontend && npm install
 COPY frontend/ frontend/
 RUN cd frontend && npm run build
 
