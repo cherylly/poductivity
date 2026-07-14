@@ -21,14 +21,21 @@ function useFetch(url) {
 }
 
 function Layout({ children }) {
+  const today = new Date()
+  const edition = today.toLocaleDateString('en-US', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+  })
+
   return (
     <div className="app">
       <nav className="navbar">
-        <div className="nav-brand">Content Digest</div>
+        <div className="nav-brand">The Daily Digest</div>
+        <div className="nav-edition">{edition} &mdash; Your Personal Edition</div>
         <div className="nav-links">
-          <NavLink to="/" end>Digest</NavLink>
-          <NavLink to="/bookmarks">Bookmarks</NavLink>
-          <NavLink to="/sources">Sources</NavLink>
+          <NavLink to="/" end>Front Page</NavLink>
+          <NavLink to="/bookmarks">Clippings</NavLink>
+          <NavLink to="/sources">Subscriptions</NavLink>
+          <NavLink to="/archive">Past Issues</NavLink>
         </div>
       </nav>
       <main className="main-content">{children}</main>
@@ -36,64 +43,127 @@ function Layout({ children }) {
   )
 }
 
+function todayStr() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 function DigestList() {
-  const { data: entries, loading } = useFetch(`${API}/entries?limit=50`)
+  const { data: entries, loading } = useFetch(`${API}/entries?limit=200`)
 
-  if (loading) return <div className="loading">Loading...</div>
+  if (loading) return <div className="loading">Fetching today&rsquo;s edition&hellip;</div>
 
+  const today = todayStr()
+  const todayEntries = (entries || []).filter(e => {
+    const fetchLocal = e.created_at ? toLocalDateStr(e.created_at) : ''
+    const pubLocal = e.published_at ? toLocalDateStr(e.published_at) : ''
+    return fetchLocal === today || pubLocal === today
+  })
+
+  return (
+    <div className="digest-list">
+      <h1>Today&rsquo;s Edition</h1>
+      <p className="subtitle">{formatDateNewspaper(today)} &mdash; {todayEntries.length} stories</p>
+      {todayEntries.length === 0 ? (
+        <p className="empty-state">No new stories today. Check back later or browse <NavLink to="/archive" style={{color: 'var(--accent)'}}>past issues</NavLink>.</p>
+      ) : (
+        <div className="cards">
+          {todayEntries.map(entry => (
+            <EntryCard key={entry.id} entry={entry} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function Archive() {
+  const { data: entries, loading } = useFetch(`${API}/entries?limit=500`)
+  const navigate = useNavigate()
+
+  if (loading) return <div className="loading">Loading archive&hellip;</div>
+
+  const today = todayStr()
   const grouped = {}
   ;(entries || []).forEach(e => {
-    const date = e.published_at ? e.published_at.split('T')[0] : 'Unknown'
-    if (!grouped[date]) grouped[date] = []
-    grouped[date].push(e)
+    const fetchLocal = e.created_at ? toLocalDateStr(e.created_at) : ''
+    const pubLocal = e.published_at ? toLocalDateStr(e.published_at) : 'Unknown'
+    if (fetchLocal === today || pubLocal === today) return
+    const groupDate = pubLocal || fetchLocal
+    if (!grouped[groupDate]) grouped[groupDate] = []
+    grouped[groupDate].push(e)
   })
 
   const dates = Object.keys(grouped).sort().reverse()
 
   return (
     <div className="digest-list">
-      <h1>Your Content Digest</h1>
-      <p className="subtitle">{entries?.length || 0} items across {dates.length} days</p>
-      {dates.map(date => (
-        <div key={date} className="date-group">
-          <h2 className="date-header">{formatDate(date)}</h2>
-          <div className="cards">
-            {grouped[date].map(entry => (
-              <EntryCard key={entry.id} entry={entry} />
-            ))}
+      <h1>Past Issues</h1>
+      <p className="subtitle">{dates.length} editions in the archive</p>
+      <div className="archive-list">
+        {dates.map(date => (
+          <div
+            key={date}
+            className="archive-item"
+            onClick={() => navigate(`/archive/${date}`)}
+          >
+            <span className="archive-date">{formatDateNewspaper(date)}</span>
+            <span className="archive-count">{grouped[date].length} stories</span>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function ArchiveDay() {
+  const { date } = useParams()
+  const { data: entries, loading } = useFetch(`${API}/entries?limit=500`)
+
+  if (loading) return <div className="loading">Loading&hellip;</div>
+
+  const dayEntries = (entries || []).filter(e => {
+    const pubDate = e.published_at ? e.published_at.split('T')[0] : ''
+    return pubDate === date
+  })
+
+  return (
+    <div className="digest-list">
+      <h1>{formatDateNewspaper(date)}</h1>
+      <p className="subtitle">{dayEntries.length} stories &mdash; <NavLink to="/archive" style={{color: 'var(--accent)'}}>Back to Archive</NavLink></p>
+      <div className="cards">
+        {dayEntries.map(entry => (
+          <EntryCard key={entry.id} entry={entry} />
+        ))}
+      </div>
     </div>
   )
 }
 
 function EntryCard({ entry }) {
   const navigate = useNavigate()
-  const typeIcons = { article: '📝', video: '🎬', podcast: '🎙️' }
-  const typeColors = { article: '#e3f2fd', video: '#fce4ec', podcast: '#e8f5e9' }
 
   return (
     <div className="card" onClick={() => navigate(`/entry/${entry.id}`)}>
       <div className="card-top">
-        <span className="badge" style={{ background: typeColors[entry.content_type] }}>
-          {typeIcons[entry.content_type]} {entry.content_type}
+        <span className="badge">
+          {entry.content_type === 'article' ? 'Substack' : entry.content_type === 'video' ? 'YouTube' : entry.content_type}
         </span>
         <span className="source-name">{entry.source_name}</span>
-        {entry.bookmarked && <span className="bookmark-icon">★</span>}
+        {entry.bookmarked && <span className="bookmark-icon">&starf;</span>}
       </div>
       <h3 className="card-title">{entry.title}</h3>
       {entry.summary && (
         <>
           <p className="card-thesis">{entry.summary.thesis}</p>
           <div className="card-tags">
-            {entry.summary.tags?.slice(0, 3).map(tag => (
+            {entry.summary.tags?.slice(0, 4).map(tag => (
               <span key={tag} className="tag">{tag}</span>
             ))}
           </div>
         </>
       )}
-      {!entry.summary && <p className="card-status">Status: {entry.status}</p>}
+      {!entry.summary && <p className="card-status">{entry.status}</p>}
     </div>
   )
 }
@@ -107,7 +177,7 @@ function EntryDetail() {
     if (entry) setBookmarked(entry.bookmarked)
   }, [entry])
 
-  if (loading) return <div className="loading">Loading...</div>
+  if (loading) return <div className="loading">Loading&hellip;</div>
   if (!entry) return <div className="error">Entry not found</div>
 
   const toggleBookmark = async () => {
@@ -120,19 +190,21 @@ function EntryDetail() {
     <div className="entry-detail">
       <div className="detail-header">
         <div className="detail-meta">
-          <span className="badge" style={{ background: entry.content_type === 'article' ? '#e3f2fd' : entry.content_type === 'video' ? '#fce4ec' : '#e8f5e9' }}>
-            {entry.content_type}
-          </span>
+          <span className="badge">{entry.content_type === 'article' ? 'Substack' : entry.content_type === 'video' ? 'YouTube' : entry.content_type}</span>
           <span className="source-name">{entry.source_name}</span>
-          {entry.published_at && <span className="date">{formatDate(entry.published_at.split('T')[0])}</span>}
+          {entry.published_at && <span className="date">{formatDateNewspaper(entry.published_at.split('T')[0])}</span>}
         </div>
         <h1>{entry.title}</h1>
         <div className="detail-actions">
-          <a href={entry.url} target="_blank" rel="noopener noreferrer" className="btn btn-primary">
-            View Original
-          </a>
+          {entry.url ? (
+            <a href={entry.url} target="_blank" rel="noopener noreferrer" className="btn btn-primary">
+              Read Original
+            </a>
+          ) : (
+            <span className="btn" style={{ opacity: 0.4, cursor: 'default' }}>No Link Available</span>
+          )}
           <button onClick={toggleBookmark} className={`btn btn-bookmark ${bookmarked ? 'active' : ''}`}>
-            {bookmarked ? '★ Bookmarked' : '☆ Bookmark'}
+            {bookmarked ? '\u2605 Clipped' : '\u2606 Clip'}
           </button>
         </div>
       </div>
@@ -140,12 +212,12 @@ function EntryDetail() {
       {entry.summary && (
         <div className="summary-content">
           <section className="thesis-section">
-            <h2>Core Thesis</h2>
+            <h2>Abstract</h2>
             <p className="thesis">{entry.summary.thesis}</p>
           </section>
 
           <section className="keypoints-section">
-            <h2>Key Points</h2>
+            <h2>Key Highlights</h2>
             <ul className="keypoints">
               {entry.summary.key_points.map((point, i) => (
                 <li key={i} className="keypoint">
@@ -179,7 +251,7 @@ function EntryDetail() {
           )}
 
           <section className="conclusion-section">
-            <h2>Conclusion</h2>
+            <h2>Summary</h2>
             <p className="conclusion">{entry.summary.conclusion}</p>
           </section>
 
@@ -199,14 +271,14 @@ function EntryDetail() {
 function Bookmarks() {
   const { data: entries, loading } = useFetch(`${API}/bookmarks`)
 
-  if (loading) return <div className="loading">Loading...</div>
+  if (loading) return <div className="loading">Loading clippings&hellip;</div>
 
   return (
     <div className="digest-list">
-      <h1>Bookmarks</h1>
-      <p className="subtitle">{entries?.length || 0} saved items</p>
+      <h1>Clippings</h1>
+      <p className="subtitle">{entries?.length || 0} saved articles</p>
       {entries?.length === 0 && (
-        <p className="empty-state">No bookmarks yet. Click the star on any entry to save it.</p>
+        <p className="empty-state">Your clippings folder is empty. Click the star on any story to save it here.</p>
       )}
       <div className="cards">
         {(entries || []).map(entry => (
@@ -244,26 +316,26 @@ function Sources() {
   }
 
   const deleteSource = async (id) => {
-    if (!confirm('Remove this source?')) return
+    if (!confirm('Remove this subscription?')) return
     await fetch(`${API}/sources/${id}`, { method: 'DELETE' })
     loadSources()
   }
 
-  if (loading) return <div className="loading">Loading...</div>
+  if (loading) return <div className="loading">Loading subscriptions&hellip;</div>
 
   return (
     <div className="sources-page">
       <div className="page-header">
-        <h1>Subscription Sources</h1>
+        <h1>Subscriptions</h1>
         <button className="btn btn-primary" onClick={() => setShowForm(!showForm)}>
-          {showForm ? 'Cancel' : '+ Add Source'}
+          {showForm ? 'Cancel' : '+ Subscribe'}
         </button>
       </div>
 
       {showForm && (
         <form className="source-form" onSubmit={addSource}>
           <input
-            placeholder="Name (e.g. Lenny's Newsletter)"
+            placeholder="Publication name"
             value={form.name}
             onChange={e => setForm({ ...form, name: e.target.value })}
             required
@@ -274,7 +346,7 @@ function Sources() {
             <option value="podcast">Podcast</option>
           </select>
           <input
-            placeholder="URL (RSS feed or channel URL)"
+            placeholder="RSS feed or channel URL"
             value={form.url}
             onChange={e => setForm({ ...form, url: e.target.value })}
             required
@@ -301,6 +373,7 @@ function Sources() {
 }
 
 function getTimestampLink(url, timestamp) {
+  if (!url) return '#'
   if (url.includes('youtube.com') || url.includes('youtu.be')) {
     const parts = timestamp.split(':')
     const seconds = parts.length === 2
@@ -311,9 +384,17 @@ function getTimestampLink(url, timestamp) {
   return url
 }
 
-function formatDate(dateStr) {
+function toLocalDateStr(isoStr) {
+  if (!isoStr) return ''
+  const d = new Date(isoStr.endsWith('Z') ? isoStr : isoStr + 'Z')
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function formatDateNewspaper(dateStr) {
   const d = new Date(dateStr + 'T00:00:00')
-  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
+  return d.toLocaleDateString('en-US', {
+    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
+  })
 }
 
 function App() {
@@ -325,6 +406,8 @@ function App() {
           <Route path="/entry/:id" element={<EntryDetail />} />
           <Route path="/bookmarks" element={<Bookmarks />} />
           <Route path="/sources" element={<Sources />} />
+          <Route path="/archive" element={<Archive />} />
+          <Route path="/archive/:date" element={<ArchiveDay />} />
         </Routes>
       </Layout>
     </BrowserRouter>

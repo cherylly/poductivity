@@ -129,51 +129,76 @@ async def fetch_all_sources(session) -> list[Entry]:
 
 
 async def summarize_entries(session, entries: list[Entry]) -> int:
-    """Generate summaries for entries that have raw text."""
-    count = 0
+    """Generate summaries for entries that have raw text (with concurrency)."""
+    MAX_CONCURRENT = 5
+    semaphore = asyncio.Semaphore(MAX_CONCURRENT)
 
+    no_text = []
+    to_summarize = []
     for entry in entries:
         if not entry.raw_text:
-            if entry.content_type == "podcast":
-                entry.status = "pending"  # needs transcription first
-            else:
-                entry.status = "failed"
-                entry.error_message = "No text content available"
-            continue
+            no_text.append(entry)
+        else:
+            to_summarize.append(entry)
 
-        try:
-            entry.status = "summarizing"
-            session.commit()
+    for entry in no_text:
+        if entry.content_type == "podcast":
+            entry.status = "pending"
+        else:
+            entry.status = "failed"
+            entry.error_message = "No text content available"
+    session.commit()
 
-            source = session.query(Source).get(entry.source_id)
-            result = await generate_summary(
+    results = {}
+
+    async def _summarize_one(entry):
+        source = session.query(Source).get(entry.source_id)
+        async with semaphore:
+            return await generate_summary(
                 text=entry.raw_text,
                 title=entry.title,
                 content_type=entry.content_type,
                 source_name=source.name if source else "",
             )
 
+    tasks = []
+    for entry in to_summarize:
+        entry.status = "summarizing"
+        tasks.append((entry, asyncio.create_task(_summarize_one(entry))))
+    session.commit()
+
+    count = 0
+    for entry, task in tasks:
+        try:
+            result = await task
             if result:
-                summary = Summary(
-                    entry_id=entry.id,
-                    thesis=result["thesis"],
-                    conclusion=result["conclusion"],
-                    word_count=len(result["thesis"]) + sum(
-                        len(p.get("text", "")) for p in result["key_points"]
-                    ) + sum(
-                        len(t) for t in result.get("actionable_takeaways", [])
-                    ),
+                existing = session.query(Summary).filter(Summary.entry_id == entry.id).first()
+                if existing:
+                    summary = existing
+                else:
+                    summary = Summary(entry_id=entry.id)
+                    session.add(summary)
+
+                summary.thesis = result["thesis"]
+                summary.conclusion = result["conclusion"]
+                summary.word_count = len(result["thesis"]) + sum(
+                    len(p.get("text", "")) for p in result["key_points"]
+                ) + sum(
+                    len(t) for t in result.get("actionable_takeaways", [])
                 )
                 summary.set_key_points(result["key_points"])
                 summary.set_actionable_takeaways(result.get("actionable_takeaways", []))
                 summary.set_tags(result.get("tags", []))
-                session.add(summary)
                 entry.status = "done"
                 count += 1
+
+                if count % 10 == 0:
+                    session.commit()
+
+                logger.info(f"Summarized [{count}/{len(to_summarize)}]: {entry.title[:50]}")
             else:
                 entry.status = "failed"
                 entry.error_message = "LLM summary generation returned None"
-
         except Exception as e:
             entry.status = "failed"
             entry.error_message = str(e)

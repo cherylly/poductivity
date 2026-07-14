@@ -61,6 +61,7 @@ class EntryResponse(BaseModel):
     content_type: str
     source_name: str
     published_at: Optional[str]
+    created_at: Optional[str] = None
     status: str
     summary: Optional[SummaryResponse] = None
     bookmarked: bool = False
@@ -263,6 +264,7 @@ def _entry_to_response(session, entry: Entry) -> EntryResponse:
         content_type=entry.content_type,
         source_name=source.name if source else "Unknown",
         published_at=entry.published_at.isoformat() if entry.published_at else None,
+        created_at=entry.created_at.isoformat() if entry.created_at else None,
         status=entry.status,
         summary=summary_data,
         bookmarked=bookmarked,
