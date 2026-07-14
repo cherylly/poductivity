@@ -16,6 +16,7 @@ from src.fetchers.substack import SubstackFetcher
 from src.fetchers.youtube import YouTubeFetcher
 from src.models import DailyDigest, Entry, Source, Summary, get_session, init_db
 from src.summarizer.llm import generate_summary
+from src.transcriber.groq_whisper import transcribe_audio
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +38,10 @@ async def run_daily_pipeline():
         new_entries = await fetch_all_sources(session)
         logger.info(f"Fetched {len(new_entries)} new entries")
 
-        # Step 2: Also pick up any previously pending entries
+        # Step 2: Transcribe podcast entries that have audio but no transcript
+        await transcribe_pending_podcasts(session)
+
+        # Step 3: Also pick up any previously pending entries
         pending = (
             session.query(Entry)
             .filter(Entry.status.in_(["pending", "summarizing"]))
@@ -46,11 +50,11 @@ async def run_daily_pipeline():
         )
         entries_to_summarize = list({e.id: e for e in new_entries + pending}.values())
 
-        # Step 3: Generate summaries
+        # Step 4: Generate summaries
         summarized = await summarize_entries(session, entries_to_summarize)
         logger.info(f"Summarized {summarized} entries")
 
-        # Step 4: Create daily digest record
+        # Step 5: Create daily digest record
         done_entries = (
             session.query(Entry)
             .filter(Entry.status == "done")
@@ -61,7 +65,7 @@ async def run_daily_pipeline():
         )
         digest = create_daily_digest(session, done_entries)
 
-        # Step 5: Send email
+        # Step 6: Send email
         if digest and done_entries:
             send_digest_email(session, digest)
 
@@ -74,6 +78,49 @@ async def run_daily_pipeline():
         raise
     finally:
         session.close()
+
+
+async def transcribe_pending_podcasts(session):
+    """Transcribe podcast entries that have audio_url but only description-based text."""
+    from src.config import settings
+
+    if not settings.groq_api_key:
+        logger.info("Groq API key not configured, skipping podcast transcription")
+        return
+
+    entries = (
+        session.query(Entry)
+        .filter(
+            Entry.content_type == "podcast",
+            Entry.audio_url.isnot(None),
+            Entry.status.in_(["pending", "summarizing"]),
+        )
+        .all()
+    )
+
+    needs_transcription = [
+        e for e in entries
+        if not e.raw_text or e.raw_text.startswith("[Episode description]")
+    ]
+
+    if not needs_transcription:
+        return
+
+    logger.info(f"Transcribing {len(needs_transcription)} podcast episodes via Groq Whisper")
+
+    for entry in needs_transcription:
+        try:
+            transcript = await transcribe_audio(entry.audio_url)
+            if transcript and len(transcript) > 100:
+                entry.raw_text = transcript
+                entry.status = "summarizing"
+                logger.info(f"Transcribed: {entry.title[:50]} ({len(transcript)} chars)")
+            else:
+                logger.warning(f"Transcription too short or failed for: {entry.title[:50]}")
+        except Exception as e:
+            logger.error(f"Transcription error for '{entry.title}': {e}")
+
+    session.commit()
 
 
 async def fetch_all_sources(session) -> list[Entry]:

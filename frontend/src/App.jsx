@@ -20,7 +20,22 @@ function useFetch(url) {
   return { data, loading, error }
 }
 
+function useTheme() {
+  const [dark, setDark] = useState(() => {
+    const saved = localStorage.getItem('theme')
+    return saved === 'dark'
+  })
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light')
+    localStorage.setItem('theme', dark ? 'dark' : 'light')
+  }, [dark])
+
+  return [dark, () => setDark(d => !d)]
+}
+
 function Layout({ children }) {
+  const [dark, toggleTheme] = useTheme()
   const today = new Date()
   const edition = today.toLocaleDateString('en-US', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
@@ -29,6 +44,9 @@ function Layout({ children }) {
   return (
     <div className="app">
       <nav className="navbar">
+        <button className="theme-toggle" onClick={toggleTheme} title={dark ? 'Light mode' : 'Dark mode'}>
+          {dark ? '\u2600' : '\u263E'}
+        </button>
         <div className="nav-brand">The Daily Digest</div>
         <div className="nav-edition">{edition} &mdash; Your Personal Edition</div>
         <div className="nav-links">
@@ -150,6 +168,12 @@ function EntryCard({ entry }) {
           {entry.content_type === 'article' ? 'Substack' : entry.content_type === 'video' ? 'YouTube' : entry.content_type}
         </span>
         <span className="source-name">{entry.source_name}</span>
+        {entry.transcript_source === 'description' && (
+          <span className="transcript-badge desc">Description Only</span>
+        )}
+        {entry.transcript_source === 'transcript' && (
+          <span className="transcript-badge full">Full Transcript</span>
+        )}
         {entry.bookmarked && <span className="bookmark-icon">&starf;</span>}
       </div>
       <h3 className="card-title">{entry.title}</h3>
@@ -193,6 +217,12 @@ function EntryDetail() {
           <span className="badge">{entry.content_type === 'article' ? 'Substack' : entry.content_type === 'video' ? 'YouTube' : entry.content_type}</span>
           <span className="source-name">{entry.source_name}</span>
           {entry.published_at && <span className="date">{formatDateNewspaper(entry.published_at.split('T')[0])}</span>}
+          {entry.transcript_source === 'description' && (
+            <span className="transcript-badge desc">Based on Description</span>
+          )}
+          {entry.transcript_source === 'transcript' && (
+            <span className="transcript-badge full">Based on Full Transcript</span>
+          )}
         </div>
         <h1>{entry.title}</h1>
         <div className="detail-actions">

@@ -35,9 +35,9 @@ class Settings(BaseSettings):
     email_send_hour: int = 7
     email_send_minute: int = 0
 
-    # ASR
-    whisper_model: str = "large-v3"
-    whisper_device: str = "cuda"
+    # ASR (Groq Whisper API)
+    groq_api_key: str = ""
+    groq_whisper_model: str = "whisper-large-v3-turbo"
 
     # Database
     db_path: str = "data/content_digest.db"

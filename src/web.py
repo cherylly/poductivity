@@ -65,6 +65,7 @@ class EntryResponse(BaseModel):
     status: str
     summary: Optional[SummaryResponse] = None
     bookmarked: bool = False
+    transcript_source: Optional[str] = None
 
 
 class DigestResponse(BaseModel):
@@ -257,6 +258,13 @@ def _entry_to_response(session, entry: Entry) -> EntryResponse:
 
     bookmarked = session.query(Bookmark).filter(Bookmark.entry_id == entry.id).first() is not None
 
+    transcript_source = None
+    if entry.content_type == "video" and entry.raw_text:
+        if entry.raw_text.startswith("[Video description]"):
+            transcript_source = "description"
+        elif entry.raw_text.startswith("["):
+            transcript_source = "transcript"
+
     return EntryResponse(
         id=entry.id,
         title=entry.title,
@@ -268,6 +276,7 @@ def _entry_to_response(session, entry: Entry) -> EntryResponse:
         status=entry.status,
         summary=summary_data,
         bookmarked=bookmarked,
+        transcript_source=transcript_source,
     )
 
 
