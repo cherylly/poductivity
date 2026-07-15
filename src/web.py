@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import random
 from datetime import date, datetime
 from pathlib import Path
 from typing import List, Optional
@@ -242,6 +243,202 @@ async def list_bookmarks():
         return entries
     finally:
         session.close()
+
+
+# --- News API (智驾行业新闻) ---
+
+NEWS_SOURCES = [
+    {"name": "36氪汽车", "url": "https://36kr.com/motorcar"},
+    {"name": "汽车之家", "url": "https://www.autohome.com.cn"},
+    {"name": "懂车帝", "url": "https://www.dongchedi.com"},
+]
+
+SAMPLE_NEWS = [
+    {
+        "title": "小马智行获准在北京亦庄开启无人化自动驾驶出行服务",
+        "source": "36氪汽车",
+        "published_at": "2026-07-15",
+        "url": "https://36kr.com/p/123456",
+        "summary": "小马智行宣布获准在北京亦庄开启全无人自动驾驶出行服务，成为国内首批获得无人化自动驾驶商业运营许可的企业。",
+        "tags": ["自动驾驶", "Robotaxi", "北京"]
+    },
+    {
+        "title": "特斯拉FSD V13版本在中国开启推送",
+        "source": "汽车之家",
+        "published_at": "2026-07-15",
+        "url": "https://www.autohome.com.cn/news/123",
+        "summary": "特斯拉开始向中国用户推送FSD V13版本，新增城市道路自动驾驶功能，进一步提升智能驾驶体验。",
+        "tags": ["特斯拉", "FSD", "智能驾驶"]
+    },
+    {
+        "title": "理想汽车发布最新OTA更新，AD Max智驾能力大幅提升",
+        "source": "懂车帝",
+        "published_at": "2026-07-14",
+        "url": "https://www.dongchedi.com/article/456",
+        "summary": "理想汽车发布最新OTA 5.2版本，AD Max智驾系统新增城市NOA功能，覆盖全国300+城市。",
+        "tags": ["理想汽车", "OTA", "NOA"]
+    }
+]
+
+
+class NewsItem(BaseModel):
+    title: str
+    source: str
+    published_at: str
+    url: Optional[str] = None
+    summary: Optional[str] = None
+    tags: List[str] = []
+
+
+@app.get("/api/news", response_model=List[NewsItem])
+async def get_news():
+    """获取今日智驾行业新闻"""
+    return SAMPLE_NEWS
+
+
+@app.post("/api/news/fetch", response_model=List[NewsItem])
+async def fetch_news():
+    """获取最新新闻（模拟）"""
+    # 这里可以接入真实的新闻源 API
+    # 目前返回模拟数据
+    return SAMPLE_NEWS
+
+
+# --- Thinking API (每日思考 - 面试问题) ---
+
+INTERVIEW_QUESTIONS = [
+    {
+        "question": "如何评估一个海外市场的进入时机是否成熟？",
+        "context": "在海外销售中，市场时机往往决定了成败。需要从市场成熟度、竞争格局、法规政策等多维度分析。",
+        "answer": [
+            "分析目标市场的经济增长趋势和消费者购买力变化",
+            "评估本地竞争者的市场占有率和产品竞争力",
+            "研究当地的法规政策是否对外资企业友好",
+            "考察供应链和物流基础设施的完善程度",
+            "判断企业文化差异带来的进入门槛"
+        ],
+        "tips": "建议用数据支撑你的分析，展示你对市场调研方法的理解"
+    },
+    {
+        "question": "如果客户对价格敏感，你会如何进行价值销售？",
+        "context": "海外客户往往对价格非常敏感，如何在价格谈判中突出产品价值是关键能力。",
+        "answer": [
+            "先了解客户的具体痛点和业务目标",
+            "用ROI计算展示产品带来的长期收益",
+            "强调独特的技术优势和服务保障",
+            "提供分阶段付款或试用方案降低风险",
+            "分享同行业成功案例增强信心"
+        ],
+        "tips": "准备2-3个真实的价格谈判案例，展示你的谈判技巧"
+    },
+    {
+        "question": "你如何处理跨文化沟通中的误解？",
+        "context": "海外销售需要与不同文化背景的客户打交道，文化敏感度是必备能力。",
+        "answer": [
+            "主动学习和了解目标市场的文化习俗",
+            "保持开放心态，不预设立场",
+            "遇到误解时，耐心倾听并确认理解",
+            "使用简单清晰的语言，避免俚语和文化隐喻",
+            "必要时寻求本地同事或翻译的帮助"
+        ],
+        "tips": "可以举一个你成功化解跨文化冲突的具体例子"
+    },
+    {
+        "question": "如何制定一个新市场的销售策略？",
+        "context": "制定新市场策略需要综合考虑市场分析、渠道选择、团队建设等多个方面。",
+        "answer": [
+            "进行市场调研，了解市场规模和竞争格局",
+            "确定目标客户群体和购买决策流程",
+            "选择合适的销售渠道（直销/代理商/线上）",
+            "制定本地化的营销推广计划",
+            "建立销售团队和培训体系"
+        ],
+        "tips": "最好准备一个你参与过的新市场开拓案例"
+    },
+    {
+        "question": "你如何看待竞争对手？如何应对价格战？",
+        "context": "海外市场竞争激烈，如何正确看待竞争并制定应对策略。",
+        "answer": [
+            "尊重竞争对手，学习他们的优势",
+            "不盲目打价格战，聚焦差异化价值",
+            "深入了解客户需求，提供定制化方案",
+            "强化服务壁垒，提升客户粘性",
+            "必要时寻求总部资源支持"
+        ],
+        "tips": "用具体案例说明你如何应对过价格竞争"
+    },
+    {
+        "question": "如何建立和维护海外大客户关系？",
+        "context": "大客户是海外销售的重要资源，需要系统化的关系管理方法。",
+        "answer": [
+            "深入了解客户组织架构和决策流程",
+            "定期拜访保持沟通，建立信任",
+            "提供超出期望的服务支持",
+            "邀请客户参观公司或工厂增强信心",
+            "建立多层级关系，不依赖单一联系人"
+        ],
+        "tips": "准备一个你成功维护大客户关系的故事"
+    },
+    {
+        "question": "如果产品在海外市场出现问题，你会如何处理？",
+        "context": "海外售后和危机处理能力是考察重点，展示你的问题解决能力。",
+        "answer": [
+            "第一时间响应客户，展示负责态度",
+            "快速定位问题根源，评估影响范围",
+            "提供临时解决方案减少客户损失",
+            "协调总部资源进行根本性修复",
+            "事后总结并优化流程避免复发"
+        ],
+        "tips": "建议准备一个具体的危机处理案例"
+    },
+    {
+        "question": "你如何利用数据驱动销售决策？",
+        "context": "现代销售越来越依赖数据分析能力，展示你的数据思维。",
+        "answer": [
+            "建立销售漏斗，追踪各阶段转化率",
+            "分析客户行为数据优化触达策略",
+            "用CRM系统管理客户信息和跟进记录",
+            "定期复盘销售数据找出改进机会",
+            "预测销售趋势，提前调整资源"
+        ],
+        "tips": "准备具体的数据分析案例和改进成果"
+    },
+    {
+        "question": "如何与海外代理商/经销商合作？",
+        "context": "渠道管理是海外销售的重要技能，需要展示你的渠道合作经验。",
+        "answer": [
+            "选择有实力且价值观匹配的合作伙伴",
+            "明确合作条款和双方权责",
+            "提供充分的产品培训和销售支持",
+            "建立定期沟通机制，解决问题",
+            "设置合理的销售目标和激励政策"
+        ],
+        "tips": "如有渠道管理经验，一定要用具体案例说明"
+    }
+]
+
+
+class QuestionItem(BaseModel):
+    question: str
+    context: Optional[str] = None
+    answer: Optional[List[str]] = None
+    tips: Optional[str] = None
+
+
+@app.get("/api/thinking/questions", response_model=List[QuestionItem])
+async def get_questions():
+    """获取今日面试问题"""
+    # 每天随机选择3个问题
+    today = date.today()
+    random.seed(today.toordinal())
+    return random.sample(INTERVIEW_QUESTIONS, 3)
+
+
+@app.post("/api/thinking/generate", response_model=List[QuestionItem])
+async def generate_questions():
+    """生成新的面试问题"""
+    # 随机选择3个问题
+    return random.sample(INTERVIEW_QUESTIONS, 3)
 
 
 # --- Helpers ---

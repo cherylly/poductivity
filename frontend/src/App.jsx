@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, NavLink, useParams, useNavigate } from 'react-router-dom'
 import './App.css'
+import Home from './pages/Home'
+import News from './pages/News'
+import Thinking from './pages/Thinking'
 
 const API = '/api'
 
@@ -36,10 +39,6 @@ function useTheme() {
 
 function Layout({ children }) {
   const [dark, toggleTheme] = useTheme()
-  const today = new Date()
-  const edition = today.toLocaleDateString('en-US', {
-    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
-  })
 
   return (
     <div className="app">
@@ -47,13 +46,16 @@ function Layout({ children }) {
         <button className="theme-toggle" onClick={toggleTheme} title={dark ? 'Light mode' : 'Dark mode'}>
           {dark ? '\u2600' : '\u263E'}
         </button>
-        <div className="nav-brand">The Daily Digest</div>
-        <div className="nav-edition">{edition} &mdash; Your Personal Edition</div>
-        <div className="nav-links">
-          <NavLink to="/" end>Front Page</NavLink>
-          <NavLink to="/bookmarks">Clippings</NavLink>
-          <NavLink to="/sources">Subscriptions</NavLink>
-          <NavLink to="/archive">Past Issues</NavLink>
+        <div className="nav-brand">
+          <NavLink to="/" style={{ textDecoration: 'none', color: 'inherit' }}>
+            My Personal Hub
+          </NavLink>
+        </div>
+        <div className="nav-links main-nav">
+          <NavLink to="/" end>Home</NavLink>
+          <NavLink to="/digest">Digest</NavLink>
+          <NavLink to="/news">News</NavLink>
+          <NavLink to="/thinking">Thinking</NavLink>
         </div>
       </nav>
       <main className="main-content">{children}</main>
@@ -83,7 +85,7 @@ function DigestList() {
       <h1>Today&rsquo;s Edition</h1>
       <p className="subtitle">{formatDateNewspaper(today)} &mdash; {todayEntries.length} stories</p>
       {todayEntries.length === 0 ? (
-        <p className="empty-state">No new stories today. Check back later or browse <NavLink to="/archive" style={{color: 'var(--accent)'}}>past issues</NavLink>.</p>
+        <p className="empty-state">No new stories today. Check back later or browse <NavLink to="/digest/archive" style={{color: 'var(--accent)'}}>past issues</NavLink>.</p>
       ) : (
         <div className="cards">
           {todayEntries.map(entry => (
@@ -123,7 +125,7 @@ function Archive() {
           <div
             key={date}
             className="archive-item"
-            onClick={() => navigate(`/archive/${date}`)}
+            onClick={() => navigate(`/digest/archive/${date}`)}
           >
             <span className="archive-date">{formatDateNewspaper(date)}</span>
             <span className="archive-count">{grouped[date].length} stories</span>
@@ -148,7 +150,7 @@ function ArchiveDay() {
   return (
     <div className="digest-list">
       <h1>{formatDateNewspaper(date)}</h1>
-      <p className="subtitle">{dayEntries.length} stories &mdash; <NavLink to="/archive" style={{color: 'var(--accent)'}}>Back to Archive</NavLink></p>
+      <p className="subtitle">{dayEntries.length} stories &mdash; <NavLink to="/digest/archive" style={{color: 'var(--accent)'}}>Back to Archive</NavLink></p>
       <div className="cards">
         {dayEntries.map(entry => (
           <EntryCard key={entry.id} entry={entry} />
@@ -162,7 +164,7 @@ function EntryCard({ entry }) {
   const navigate = useNavigate()
 
   return (
-    <div className="card" onClick={() => navigate(`/entry/${entry.id}`)}>
+    <div className="card" onClick={() => navigate(`/digest/entry/${entry.id}`)}>
       <div className="card-top">
         <span className="badge">
           {entry.content_type === 'article' ? 'Substack' : entry.content_type === 'video' ? 'YouTube' : entry.content_type}
@@ -332,7 +334,7 @@ function SourceEntries() {
   return (
     <div className="digest-list">
       <h1>{sourceName}</h1>
-      <p className="subtitle">{(entries || []).length} articles &mdash; <NavLink to="/sources" style={{color: 'var(--accent)'}}>Back to Subscriptions</NavLink></p>
+      <p className="subtitle">{(entries || []).length} articles &mdash; <NavLink to="/digest/sources" style={{color: 'var(--accent)'}}>Back to Subscriptions</NavLink></p>
       <div className="cards">
         {(entries || []).map(entry => (
           <EntryCard key={entry.id} entry={entry} />
@@ -412,7 +414,7 @@ function Sources() {
       <div className="sources-list">
         {sources.map(s => (
           <div key={s.id} className="source-item">
-            <div className="source-info" onClick={() => navigate(`/source/${s.id}`)} style={{cursor: 'pointer'}}>
+            <div className="source-info" onClick={() => navigate(`/digest/source/${s.id}`)} style={{cursor: 'pointer'}}>
               <span className="platform-badge">{s.platform}</span>
               <span className="source-title">{s.name}</span>
               <span className={`status-dot ${s.active ? 'active' : 'inactive'}`} />
@@ -456,16 +458,27 @@ function App() {
     <BrowserRouter>
       <Layout>
         <Routes>
-          <Route path="/" element={<DigestList />} />
-          <Route path="/entry/:id" element={<EntryDetail />} />
-          <Route path="/bookmarks" element={<Bookmarks />} />
-          <Route path="/sources" element={<Sources />} />
-          <Route path="/source/:id" element={<SourceEntries />} />
-          <Route path="/archive" element={<Archive />} />
-          <Route path="/archive/:date" element={<ArchiveDay />} />
+          <Route path="/" element={<Home />} />
+          <Route path="/digest/*" element={<DigestRoutes />} />
+          <Route path="/news" element={<News />} />
+          <Route path="/thinking" element={<Thinking />} />
         </Routes>
       </Layout>
     </BrowserRouter>
+  )
+}
+
+function DigestRoutes() {
+  return (
+    <Routes>
+      <Route path="/" element={<DigestList />} />
+      <Route path="entry/:id" element={<EntryDetail />} />
+      <Route path="bookmarks" element={<Bookmarks />} />
+      <Route path="sources" element={<Sources />} />
+      <Route path="source/:id" element={<SourceEntries />} />
+      <Route path="archive" element={<Archive />} />
+      <Route path="archive/:date" element={<ArchiveDay />} />
+    </Routes>
   )
 }
 

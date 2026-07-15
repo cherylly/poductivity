@@ -1,0 +1,168 @@
+.thinking-page {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.thinking-page .page-header {
+  text-align: center;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 2px solid var(--rule);
+}
+
+.thinking-page h1 {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 28px;
+  margin-bottom: 8px;
+}
+
+.thinking-page .subtitle {
+  color: var(--ink-faded);
+  font-size: 14px;
+}
+
+.intro-section {
+  text-align: center;
+  padding: 20px;
+  background: var(--paper-warm);
+  border-radius: 8px;
+  margin-bottom: 24px;
+}
+
+.intro-section p {
+  color: var(--ink-light);
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+.intro-section p:last-child {
+  margin-bottom: 0;
+}
+
+.action-bar {
+  margin-bottom: 24px;
+}
+
+.questions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.question-card {
+  padding: 24px;
+  background: var(--paper-white);
+  border-radius: 8px;
+  border: 1px solid var(--rule-subtle);
+  position: relative;
+}
+
+.question-number {
+  position: absolute;
+  top: -12px;
+  left: 20px;
+  background: var(--accent);
+  color: white;
+  padding: 4px 16px;
+  border-radius: 4px;
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.question-text {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  line-height: 1.5;
+  padding-top: 8px;
+}
+
+.question-context {
+  font-size: 14px;
+  color: var(--ink-faded);
+  margin-bottom: 16px;
+  padding: 12px;
+  background: var(--paper-warm);
+  border-radius: 4px;
+}
+
+.question-actions {
+  margin-top: 16px;
+}
+
+.answer-section {
+  margin-top: 20px;
+  padding: 20px;
+  background: var(--paper-warm);
+  border-radius: 8px;
+  border-left: 3px solid var(--accent);
+}
+
+.answer-section h4 {
+  font-size: 14px;
+  color: var(--ink-faded);
+  margin-bottom: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.answer-content {
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.answer-content ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.answer-content li {
+  margin-bottom: 8px;
+}
+
+.answer-content li:last-child {
+  margin-bottom: 0;
+}
+
+.tips-section {
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  background: #fff8e6;
+  border-radius: 4px;
+}
+
+[data-theme="dark"] .tips-section {
+  background: #3a3020;
+}
+
+.tips-icon {
+  font-size: 18px;
+}
+
+.tips-text {
+  font-size: 13px;
+  color: var(--ink-light);
+}
+
+.encouragement {
+  text-align: center;
+  padding: 24px;
+  margin-top: 32px;
+  font-size: 16px;
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 48px;
+  color: var(--ink-faded);
+}
+
+.empty-state p {
+  margin-bottom: 8px;
+}

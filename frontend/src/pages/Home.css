@@ -1,0 +1,125 @@
+.home-page {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 32px 24px;
+}
+
+.hero-section {
+  text-align: center;
+  padding: 48px 24px;
+  background: linear-gradient(135deg, var(--paper-warm) 0%, var(--paper-white) 100%);
+  border-radius: 16px;
+  margin-bottom: 48px;
+}
+
+.hero-title {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 42px;
+  font-weight: 900;
+  margin-bottom: 12px;
+  color: var(--ink);
+}
+
+.hero-subtitle {
+  font-size: 18px;
+  color: var(--ink-faded);
+  margin-bottom: 8px;
+}
+
+.hero-desc {
+  font-size: 16px;
+  color: var(--ink-light);
+  font-style: italic;
+}
+
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 24px;
+  margin-bottom: 48px;
+}
+
+.feature-card {
+  padding: 32px 24px;
+  background: var(--paper-white);
+  border-radius: 12px;
+  border: 1px solid var(--rule-subtle);
+  text-decoration: none;
+  color: var(--ink);
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.feature-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
+
+.feature-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.feature-title {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+
+.feature-desc {
+  font-size: 14px;
+  color: var(--ink-light);
+  line-height: 1.6;
+  margin-bottom: 16px;
+  flex: 1;
+}
+
+.feature-link {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.quote-section {
+  text-align: center;
+  padding: 32px;
+  background: var(--paper-warm);
+  border-radius: 12px;
+  border-left: 4px solid var(--accent);
+}
+
+.quote-text {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 22px;
+  font-style: italic;
+  color: var(--ink);
+  margin-bottom: 12px;
+}
+
+.quote-author {
+  font-size: 14px;
+  color: var(--ink-faded);
+}
+
+@media (max-width: 640px) {
+  .hero-title {
+    font-size: 28px;
+  }
+
+  .hero-section {
+    padding: 32px 16px;
+  }
+
+  .feature-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .quote-text {
+    font-size: 18px;
+  }
+}
