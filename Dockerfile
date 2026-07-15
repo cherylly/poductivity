@@ -8,14 +8,12 @@ RUN cd frontend && npm run build
 FROM python:3.11-slim
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
-
 COPY pyproject.toml .
 COPY src/ src/
 COPY templates/ templates/
 COPY scripts/ scripts/
 
-RUN pip install --no-cache-dir -e .
+RUN pip install --no-cache-dir -i https://mirrors.cloud.tencent.com/pypi/simple --trusted-host mirrors.cloud.tencent.com -e .
 
 COPY --from=frontend /app/static static/
 RUN mkdir -p data

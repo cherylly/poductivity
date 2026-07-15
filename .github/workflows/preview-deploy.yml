@@ -8,7 +8,21 @@ jobs:
   deploy-preview:
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy preview to cloud server
+      - name: Checkout PR code
+        uses: actions/checkout@v4
+
+      - name: Package and upload to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          password: ${{ secrets.SERVER_PASSWORD }}
+          port: 22
+          source: "."
+          target: /opt/content-digest-preview
+          overwrite: true
+
+      - name: Build and start preview
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.SERVER_HOST }}
@@ -18,19 +32,7 @@ jobs:
           command_timeout: 30m
           script: |
             set -e
-            PREVIEW_DIR="/opt/content-digest-preview"
-            REPO_URL="https://github.com/${{ github.repository }}.git"
-            PR_BRANCH="${{ github.head_ref }}"
-
-            if [ -d "$PREVIEW_DIR" ]; then
-              cd "$PREVIEW_DIR"
-              git fetch origin
-              git checkout "$PR_BRANCH" 2>/dev/null || git checkout -b "$PR_BRANCH" "origin/$PR_BRANCH"
-              git reset --hard "origin/$PR_BRANCH"
-            else
-              git clone -b "$PR_BRANCH" "$REPO_URL" "$PREVIEW_DIR"
-              cd "$PREVIEW_DIR"
-            fi
+            cd /opt/content-digest-preview
 
             mkdir -p data
             cp /opt/content-digest/data/content_digest.db data/content_digest.db 2>/dev/null || true
@@ -42,16 +44,13 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const body = `🔍 **Preview deployed!**\n\nPreview URL: http://${{ secrets.SERVER_HOST }}:8081\n\n_Auto-deployed from commit ${context.sha.substring(0, 7)}_`;
-            
-            // Find existing bot comment
+            const body = `**Preview deployed!**\n\nPreview URL: http://${{ secrets.SERVER_HOST }}:8081\n\n_Auto-deployed from commit ${context.sha.substring(0, 7)}_`;
             const comments = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
             });
             const botComment = comments.data.find(c => c.body.includes('Preview deployed!'));
-            
             if (botComment) {
               await github.rest.issues.updateComment({
                 owner: context.repo.owner,
