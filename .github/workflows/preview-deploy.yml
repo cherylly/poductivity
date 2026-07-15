@@ -15,31 +15,27 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           password: ${{ secrets.SERVER_PASSWORD }}
           port: 22
+          command_timeout: 30m
           script: |
             set -e
             PREVIEW_DIR="/opt/content-digest-preview"
             REPO_URL="https://github.com/${{ github.repository }}.git"
             PR_BRANCH="${{ github.head_ref }}"
 
-            # Clone or update repo
             if [ -d "$PREVIEW_DIR" ]; then
               cd "$PREVIEW_DIR"
               git fetch origin
-              git checkout "$PR_BRANCH" || git checkout -b "$PR_BRANCH" "origin/$PR_BRANCH"
-              git pull origin "$PR_BRANCH"
+              git checkout "$PR_BRANCH" 2>/dev/null || git checkout -b "$PR_BRANCH" "origin/$PR_BRANCH"
+              git reset --hard "origin/$PR_BRANCH"
             else
               git clone -b "$PR_BRANCH" "$REPO_URL" "$PREVIEW_DIR"
               cd "$PREVIEW_DIR"
             fi
 
-            # Copy production database as read-only preview data
             mkdir -p data
             cp /opt/content-digest/data/content_digest.db data/content_digest.db 2>/dev/null || true
-
-            # Copy .env from production
             cp /opt/content-digest/.env .env 2>/dev/null || true
 
-            # Build and start preview on port 8081
             docker compose -p content-digest-preview -f docker-compose.preview.yml up -d --build
 
       - name: Comment preview URL on PR
