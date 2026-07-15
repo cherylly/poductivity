@@ -1,0 +1,73 @@
+name: PR Preview Deploy
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  deploy-preview:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy preview to cloud server
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          password: ${{ secrets.SERVER_PASSWORD }}
+          port: 22
+          script: |
+            set -e
+            PREVIEW_DIR="/opt/content-digest-preview"
+            REPO_URL="https://github.com/${{ github.repository }}.git"
+            PR_BRANCH="${{ github.head_ref }}"
+
+            # Clone or update repo
+            if [ -d "$PREVIEW_DIR" ]; then
+              cd "$PREVIEW_DIR"
+              git fetch origin
+              git checkout "$PR_BRANCH" || git checkout -b "$PR_BRANCH" "origin/$PR_BRANCH"
+              git pull origin "$PR_BRANCH"
+            else
+              git clone -b "$PR_BRANCH" "$REPO_URL" "$PREVIEW_DIR"
+              cd "$PREVIEW_DIR"
+            fi
+
+            # Copy production database as read-only preview data
+            mkdir -p data
+            cp /opt/content-digest/data/content_digest.db data/content_digest.db 2>/dev/null || true
+
+            # Copy .env from production
+            cp /opt/content-digest/.env .env 2>/dev/null || true
+
+            # Build and start preview on port 8081
+            docker compose -p content-digest-preview -f docker-compose.preview.yml up -d --build
+
+      - name: Comment preview URL on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = `🔍 **Preview deployed!**\n\nPreview URL: http://${{ secrets.SERVER_HOST }}:8081\n\n_Auto-deployed from commit ${context.sha.substring(0, 7)}_`;
+            
+            // Find existing bot comment
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const botComment = comments.data.find(c => c.body.includes('Preview deployed!'));
+            
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }

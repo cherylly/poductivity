@@ -10,7 +10,7 @@ from datetime import datetime
 import feedparser
 import httpx
 from youtube_transcript_api import YouTubeTranscriptApi
-from youtube_transcript_api.proxies import WebshareProxyConfig
+from youtube_transcript_api.proxies import GenericProxyConfig
 
 from .base import BaseFetcher, FetchedEntry
 
@@ -127,10 +127,11 @@ class YouTubeFetcher(BaseFetcher):
         try:
             proxy_url = _get_proxy_url()
             if proxy_url:
-                import requests
-                session = requests.Session()
-                session.proxies = {"https": proxy_url, "http": proxy_url}
-                api = YouTubeTranscriptApi(http_client=session)
+                proxy_config = GenericProxyConfig(
+                    http_url=proxy_url,
+                    https_url=proxy_url,
+                )
+                api = YouTubeTranscriptApi(proxy_config=proxy_config)
             else:
                 api = YouTubeTranscriptApi()
 

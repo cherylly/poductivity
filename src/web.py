@@ -182,12 +182,14 @@ async def get_entry(entry_id: int):
 
 
 @app.get("/api/entries", response_model=List[EntryResponse])
-async def list_entries(limit: int = 20, offset: int = 0, status: Optional[str] = None, lite: bool = False):
+async def list_entries(limit: int = 20, offset: int = 0, status: Optional[str] = None, lite: bool = False, source_id: Optional[int] = None):
     session = get_session()
     try:
         query = session.query(Entry).order_by(Entry.published_at.desc())
         if status:
             query = query.filter(Entry.status == status)
+        if source_id:
+            query = query.filter(Entry.source_id == source_id)
         entries = query.offset(offset).limit(limit).all()
         return [_entry_to_response(session, e, lite=lite) for e in entries]
     finally:
@@ -249,12 +251,13 @@ def _entry_to_response(session, entry: Entry, lite: bool = False) -> EntryRespon
     summary_data = None
     if entry.summary:
         if lite:
+            thesis = entry.summary.thesis or ""
             summary_data = SummaryResponse(
-                thesis=entry.summary.thesis,
+                thesis=thesis[:200] + "..." if len(thesis) > 200 else thesis,
                 key_points=[],
                 actionable_takeaways=[],
                 conclusion="",
-                tags=entry.summary.get_tags(),
+                tags=entry.summary.get_tags()[:4],
             )
         else:
             summary_data = SummaryResponse(

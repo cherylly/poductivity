@@ -37,7 +37,7 @@ class PodcastFetcher(BaseFetcher):
         feed = feedparser.parse(resp.text)
         entries = []
 
-        for item in feed.entries[:10]:  # limit to latest 10 episodes
+        for item in feed.entries[:15]:  # limit to latest 15 episodes
             published = self._parse_date(item)
             if since and published and published <= since:
                 continue

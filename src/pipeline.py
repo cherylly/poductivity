@@ -148,8 +148,10 @@ async def fetch_all_sources(session) -> list[Entry]:
             fetched = await fetcher.fetch_new_entries(rss_url, since=since)
 
             for item in fetched:
-                # Skip if already exists (by URL)
-                existing = session.query(Entry).filter(Entry.url == item.url).first()
+                existing = session.query(Entry).filter(
+                    Entry.title == item.title,
+                    Entry.source_id == source.id,
+                ).first()
                 if existing:
                     continue
 

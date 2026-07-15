@@ -67,7 +67,7 @@ function todayStr() {
 }
 
 function DigestList() {
-  const { data: entries, loading } = useFetch(`${API}/entries?limit=200&lite=true`)
+  const { data: entries, loading } = useFetch(`${API}/entries?limit=50&lite=true`)
 
   if (loading) return <div className="loading">Fetching today&rsquo;s edition&hellip;</div>
 
@@ -319,7 +319,31 @@ function Bookmarks() {
   )
 }
 
+function SourceEntries() {
+  const { id } = useParams()
+  const { data: entries, loading } = useFetch(`${API}/entries?limit=200&lite=true&source_id=${id}`)
+  const { data: sources } = useFetch(`${API}/sources`)
+
+  if (loading) return <div className="loading">Loading&hellip;</div>
+
+  const source = (sources || []).find(s => s.id === parseInt(id))
+  const sourceName = source ? source.name : 'Source'
+
+  return (
+    <div className="digest-list">
+      <h1>{sourceName}</h1>
+      <p className="subtitle">{(entries || []).length} articles &mdash; <NavLink to="/sources" style={{color: 'var(--accent)'}}>Back to Subscriptions</NavLink></p>
+      <div className="cards">
+        {(entries || []).map(entry => (
+          <EntryCard key={entry.id} entry={entry} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function Sources() {
+  const navigate = useNavigate()
   const [sources, setSources] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -388,7 +412,7 @@ function Sources() {
       <div className="sources-list">
         {sources.map(s => (
           <div key={s.id} className="source-item">
-            <div className="source-info">
+            <div className="source-info" onClick={() => navigate(`/source/${s.id}`)} style={{cursor: 'pointer'}}>
               <span className="platform-badge">{s.platform}</span>
               <span className="source-title">{s.name}</span>
               <span className={`status-dot ${s.active ? 'active' : 'inactive'}`} />
@@ -436,6 +460,7 @@ function App() {
           <Route path="/entry/:id" element={<EntryDetail />} />
           <Route path="/bookmarks" element={<Bookmarks />} />
           <Route path="/sources" element={<Sources />} />
+          <Route path="/source/:id" element={<SourceEntries />} />
           <Route path="/archive" element={<Archive />} />
           <Route path="/archive/:date" element={<ArchiveDay />} />
         </Routes>
