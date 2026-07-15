@@ -1,0 +1,105 @@
+.news-page {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.news-page .page-header {
+  text-align: center;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 2px solid var(--rule);
+}
+
+.news-page h1 {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 28px;
+  margin-bottom: 8px;
+}
+
+.news-page .subtitle {
+  color: var(--ink-faded);
+  font-size: 14px;
+}
+
+.action-bar {
+  margin-bottom: 24px;
+}
+
+.news-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.news-item {
+  padding: 20px;
+  background: var(--paper-warm);
+  border-radius: 8px;
+  border: 1px solid var(--rule-subtle);
+}
+
+.news-item:hover {
+  border-color: var(--rule-light);
+}
+
+.news-meta {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  font-size: 12px;
+  color: var(--ink-faded);
+}
+
+.news-source {
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.news-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 10px;
+  line-height: 1.4;
+}
+
+.news-title a {
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.news-title a:hover {
+  color: var(--accent);
+}
+
+.news-summary {
+  font-size: 14px;
+  color: var(--ink-light);
+  line-height: 1.6;
+  margin-bottom: 12px;
+}
+
+.news-tags {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.news-tag {
+  font-size: 11px;
+  padding: 2px 8px;
+  background: var(--paper-white);
+  border: 1px solid var(--rule-subtle);
+  border-radius: 3px;
+  color: var(--ink-faded);
+}
+
+.empty-state {
+  text-align: center;
+  padding: 48px;
+  color: var(--ink-faded);
+}
+
+.empty-state p {
+  margin-bottom: 8px;
+}
