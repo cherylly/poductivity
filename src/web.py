@@ -431,34 +431,27 @@ async def generate_questions():
     return _thinking_cache
 
 
-# --- Translation API ---
+# --- Translation API (Google Translate, fast) ---
 
 _translation_cache: dict = {}
 
-TRANSLATE_PROMPT = """将以下英文内容翻译成简体中文。保持原有格式和结构，只翻译文本内容。
-如果内容已经是中文，则原样返回。
 
-返回纯 JSON，格式如下：
-{{
-  "title": "翻译后的标题",
-  "thesis": "翻译后的摘要",
-  "key_points": [
-    {{"topic": "翻译后的主题", "text": "翻译后的内容", "timestamp": "保留原始时间戳"}}
-  ],
-  "actionable_takeaways": ["翻译后的要点1", "翻译后的要点2"],
-  "conclusion": "翻译后的总结",
-  "tags": ["翻译后的标签1", "翻译后的标签2"]
-}}
-
-需要翻译的内容：
-标题: {title}
-摘要: {thesis}
-关键要点: {key_points}
-可执行要点: {takeaways}
-总结: {conclusion}
-标签: {tags}
-
-只返回JSON，不要其他内容。"""
+def _google_translate(text: str, target: str = "zh-CN") -> str:
+    """Translate text using free Google Translate API."""
+    if not text or not text.strip():
+        return text
+    import urllib.request
+    import urllib.parse
+    encoded = urllib.parse.quote(text[:4500])
+    url = f"https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl={target}&dt=t&q={encoded}"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read())
+            return "".join(seg[0] for seg in data[0] if seg[0])
+    except Exception as e:
+        logger.warning(f"Google translate failed: {e}")
+        return text
 
 
 @app.post("/api/entries/{entry_id}/translate")
@@ -475,42 +468,43 @@ async def translate_entry(entry_id: int):
             raise HTTPException(status_code=400, detail="No summary to translate")
 
         summary = entry.summary
-        kp_text = json.dumps(
-            [{"topic": p.get("topic", ""), "text": p.get("text", ""), "timestamp": p.get("timestamp", "")}
-             for p in summary.get_key_points()],
-            ensure_ascii=False)
-        takeaways_text = json.dumps(summary.get_actionable_takeaways(), ensure_ascii=False)
-        tags_text = json.dumps(summary.get_tags(), ensure_ascii=False)
+        key_points_orig = summary.get_key_points()
+        takeaways_orig = summary.get_actionable_takeaways()
+        tags_orig = summary.get_tags()
 
-        prompt = TRANSLATE_PROMPT.format(
-            title=entry.title,
-            thesis=summary.thesis or "",
-            key_points=kp_text,
-            takeaways=takeaways_text,
-            conclusion=summary.conclusion or "",
-            tags=tags_text)
+        import asyncio
+        loop = asyncio.get_event_loop()
 
-        from openai import AsyncOpenAI
-        client = AsyncOpenAI(
-            base_url=settings.llm_base_url,
-            api_key=settings.anthropic_auth_token,
-        )
+        title_t = await loop.run_in_executor(None, _google_translate, entry.title)
+        thesis_t = await loop.run_in_executor(None, _google_translate, summary.thesis or "")
+        conclusion_t = await loop.run_in_executor(None, _google_translate, summary.conclusion or "")
 
-        response = await client.chat.completions.create(
-            model=settings.llm_model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.3,
-            max_tokens=3000,
-            timeout=60,
-        )
-        content = response.choices[0].message.content.strip()
-        if content.startswith("```"):
-            content = content.split("\n", 1)[1]
-            if content.endswith("```"):
-                content = content[:-3]
-            content = content.strip()
+        kp_translated = []
+        for p in key_points_orig:
+            topic_t = await loop.run_in_executor(None, _google_translate, p.get("topic", "")) if p.get("topic") else ""
+            text_t = await loop.run_in_executor(None, _google_translate, p.get("text", ""))
+            kp_translated.append({
+                "topic": topic_t,
+                "text": text_t,
+                "timestamp": p.get("timestamp", ""),
+            })
 
-        translated = json.loads(content)
+        takeaways_t = []
+        for t in takeaways_orig:
+            takeaways_t.append(await loop.run_in_executor(None, _google_translate, t))
+
+        tags_t = []
+        for tag in tags_orig:
+            tags_t.append(await loop.run_in_executor(None, _google_translate, tag))
+
+        translated = {
+            "title": title_t,
+            "thesis": thesis_t,
+            "key_points": kp_translated,
+            "actionable_takeaways": takeaways_t,
+            "conclusion": conclusion_t,
+            "tags": tags_t,
+        }
         _translation_cache[entry_id] = translated
         return translated
     except HTTPException:

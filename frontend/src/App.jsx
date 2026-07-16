@@ -227,9 +227,12 @@ function EntryDetail() {
         const data = await res.json()
         setTranslated(data)
         setShowTranslation(true)
+      } else {
+        alert('翻译失败，请稍后重试')
       }
     } catch (e) {
       console.error('Translation failed:', e)
+      alert('翻译请求失败，请检查网络连接')
     }
     setTranslating(false)
   }
