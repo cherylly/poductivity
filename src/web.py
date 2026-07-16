@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+import logging
 import random
 from datetime import date, datetime
 from pathlib import Path
 from typing import List, Optional
 
+import feedparser
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -13,6 +15,8 @@ from pydantic import BaseModel
 
 from src.config import settings
 from src.models import Bookmark, DailyDigest, Entry, Source, Summary, get_session, init_db
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Content Digest", version="0.1.0")
 
@@ -247,38 +251,100 @@ async def list_bookmarks():
 
 # --- News API (智驾行业新闻) ---
 
-NEWS_SOURCES = [
-    {"name": "36氪汽车", "url": "https://36kr.com/motorcar"},
-    {"name": "汽车之家", "url": "https://www.autohome.com.cn"},
-    {"name": "懂车帝", "url": "https://www.dongchedi.com"},
+NEWS_RSS_SOURCES = [
+    {
+        "name": "36氪",
+        "rss": "https://36kr.com/feed",
+        "keywords": [
+            "自动驾驶", "智驾", "智能驾驶", "无人驾驶", "Robotaxi", "激光雷达",
+            "毫末", "小马智行", "文远知行", "百度Apollo", "Waymo", "Cruise",
+            "FSD", "NOA", "城市领航", "高速领航", "车路协同",
+            "蔚来", "小鹏", "理想汽车", "华为智驾", "比亚迪",
+            "L2+", "L3", "L4", "端到端",
+        ],
+    },
+    {
+        "name": "爱范儿",
+        "rss": "https://www.ifanr.com/feed",
+        "keywords": [
+            "自动驾驶", "智驾", "智能驾驶", "无人驾驶",
+            "特斯拉", "Waymo", "Robotaxi", "FSD",
+            "蔚来", "小鹏", "理想", "华为",
+        ],
+    },
+    {
+        "name": "TechCrunch",
+        "rss": "https://techcrunch.com/category/transportation/feed/",
+        "keywords": [
+            "autonomous", "self-driving", "robotaxi", "lidar",
+            "waymo", "cruise", "tesla", "fsd", "adas",
+        ],
+    },
+    {
+        "name": "The Verge",
+        "rss": "https://www.theverge.com/rss/transportation/index.xml",
+        "keywords": [
+            "autonomous", "self-driving", "robotaxi", "waymo",
+            "tesla", "autopilot", "fsd", "lidar",
+        ],
+    },
 ]
 
-SAMPLE_NEWS = [
-    {
-        "title": "小马智行获准在北京亦庄开启无人化自动驾驶出行服务",
-        "source": "36氪汽车",
-        "published_at": "2026-07-15",
-        "url": "https://36kr.com/p/123456",
-        "summary": "小马智行宣布获准在北京亦庄开启全无人自动驾驶出行服务，成为国内首批获得无人化自动驾驶商业运营许可的企业。",
-        "tags": ["自动驾驶", "Robotaxi", "北京"]
-    },
-    {
-        "title": "特斯拉FSD V13版本在中国开启推送",
-        "source": "汽车之家",
-        "published_at": "2026-07-15",
-        "url": "https://www.autohome.com.cn/news/123",
-        "summary": "特斯拉开始向中国用户推送FSD V13版本，新增城市道路自动驾驶功能，进一步提升智能驾驶体验。",
-        "tags": ["特斯拉", "FSD", "智能驾驶"]
-    },
-    {
-        "title": "理想汽车发布最新OTA更新，AD Max智驾能力大幅提升",
-        "source": "懂车帝",
-        "published_at": "2026-07-14",
-        "url": "https://www.dongchedi.com/article/456",
-        "summary": "理想汽车发布最新OTA 5.2版本，AD Max智驾系统新增城市NOA功能，覆盖全国300+城市。",
-        "tags": ["理想汽车", "OTA", "NOA"]
-    }
-]
+_news_cache: List[dict] = []
+_news_cache_time: Optional[datetime] = None
+
+
+def _fetch_news_from_rss() -> List[dict]:
+    """Fetch real news from RSS feeds, filtered by autonomous driving keywords."""
+    all_news = []
+    for src in NEWS_RSS_SOURCES:
+        try:
+            feed = feedparser.parse(src["rss"])
+            keywords = src.get("keywords", [])
+            for entry in feed.entries[:30]:
+                title = getattr(entry, "title", "")
+                summary = getattr(entry, "summary", "") or getattr(entry, "description", "")
+                text_to_check = (title + " " + summary).lower()
+                if keywords:
+                    core_kw = [
+                        "自动驾驶", "智驾", "智能驾驶", "无人驾驶", "robotaxi",
+                        "autonomous", "self-driving", "fsd", "noa", "lidar",
+                        "激光雷达", "端到端", "adas", "waymo",
+                    ]
+                    title_lower = title.lower()
+                    has_core_in_title = any(k in title_lower for k in core_kw)
+                    if has_core_in_title:
+                        pass
+                    else:
+                        hits = sum(1 for kw in keywords if kw.lower() in text_to_check)
+                        if hits < 2:
+                            continue
+
+                published = ""
+                if hasattr(entry, "published_parsed") and entry.published_parsed:
+                    from time import mktime
+                    published = datetime.fromtimestamp(mktime(entry.published_parsed)).strftime("%Y-%m-%d")
+                elif hasattr(entry, "updated_parsed") and entry.updated_parsed:
+                    from time import mktime
+                    published = datetime.fromtimestamp(mktime(entry.updated_parsed)).strftime("%Y-%m-%d")
+
+                from bs4 import BeautifulSoup
+                clean_summary = BeautifulSoup(summary, "html.parser").get_text()[:300] if summary else ""
+
+                all_news.append({
+                    "title": title,
+                    "source": src["name"],
+                    "published_at": published,
+                    "url": getattr(entry, "link", ""),
+                    "summary": clean_summary,
+                    "tags": [],
+                })
+        except Exception as e:
+            logger.warning(f"Failed to fetch RSS from {src['name']}: {e}")
+            continue
+
+    all_news.sort(key=lambda x: x.get("published_at", ""), reverse=True)
+    return all_news[:50]
 
 
 class NewsItem(BaseModel):
@@ -292,16 +358,23 @@ class NewsItem(BaseModel):
 
 @app.get("/api/news", response_model=List[NewsItem])
 async def get_news():
-    """获取今日智驾行业新闻"""
-    return SAMPLE_NEWS
+    """获取智驾行业新闻（带1小时缓存）"""
+    global _news_cache, _news_cache_time
+    now = datetime.now()
+    if _news_cache and _news_cache_time and (now - _news_cache_time).seconds < 3600:
+        return _news_cache
+    _news_cache = _fetch_news_from_rss()
+    _news_cache_time = now
+    return _news_cache
 
 
 @app.post("/api/news/fetch", response_model=List[NewsItem])
 async def fetch_news():
-    """获取最新新闻（模拟）"""
-    # 这里可以接入真实的新闻源 API
-    # 目前返回模拟数据
-    return SAMPLE_NEWS
+    """强制刷新新闻"""
+    global _news_cache, _news_cache_time
+    _news_cache = _fetch_news_from_rss()
+    _news_cache_time = datetime.now()
+    return _news_cache
 
 
 # --- Thinking API (每日思考 - 面试问题) ---
