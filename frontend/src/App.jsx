@@ -497,13 +497,30 @@ function Sources() {
   )
 }
 
+async function translateOne(text) {
+  if (!text || !text.trim()) return text
+  const chunk = text.slice(0, 4000)
+  const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=zh-CN&dt=t&q=${encodeURIComponent(chunk)}`
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 8000)
+  try {
+    const res = await fetch(url, { signal: ctrl.signal })
+    const data = await res.json()
+    return data[0].map(seg => seg[0]).join('')
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 async function translateBatch(texts) {
-  const combined = texts.join('\n---SPLIT---\n')
-  const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=zh-CN&dt=t&q=${encodeURIComponent(combined)}`
-  const res = await fetch(url)
-  const data = await res.json()
-  const full = data[0].map(seg => seg[0]).join('')
-  return full.split('---SPLIT---').map(s => s.trim())
+  const BATCH = 5
+  const results = new Array(texts.length)
+  for (let i = 0; i < texts.length; i += BATCH) {
+    const slice = texts.slice(i, i + BATCH)
+    const batch = await Promise.all(slice.map(t => translateOne(t).catch(() => t)))
+    batch.forEach((r, j) => { results[i + j] = r })
+  }
+  return results
 }
 
 function getTimestampLink(url, timestamp) {
