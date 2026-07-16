@@ -21,41 +21,69 @@ Rules:
 5. Output valid JSON only, no markdown wrapping
 6. Write in the same language as the source content"""
 
-SUMMARIZE_PROMPT_TEMPLATE = """Produce a comprehensive summary of the following {content_type} content.
+def _estimate_duration_tier(text: str) -> str:
+    """Estimate content length tier from text character count.
+
+    Rough heuristic: ~150 words/min speech, ~5 chars/word EN, ~1.5 chars/word ZH.
+    Transcript of 1 min ≈ 600-750 chars.
+    """
+    length = len(text)
+    if length < 1500:        # < ~2 min
+        return "very_short"
+    elif length < 5000:      # ~2-7 min
+        return "short"
+    elif length < 20000:     # ~7-30 min
+        return "medium"
+    elif length < 60000:     # ~30-90 min
+        return "long"
+    else:                    # 90 min+
+        return "very_long"
+
+
+TIER_GUIDELINES = {
+    "very_short": "2-3 key points, 1-2 actionable takeaways, thesis 1-2 sentences, conclusion 1 sentence",
+    "short":      "3-5 key points, 2-3 actionable takeaways, thesis 1-2 sentences, conclusion 1-2 sentences",
+    "medium":     "5-8 key points, 3-4 actionable takeaways, thesis 2-3 sentences, conclusion 2 sentences",
+    "long":       "8-12 key points, 4-5 actionable takeaways, thesis 2-4 sentences, conclusion 2-3 sentences",
+    "very_long":  "10-15 key points, 5-7 actionable takeaways, thesis 2-4 sentences, conclusion 2-3 sentences",
+}
+
+
+SUMMARIZE_PROMPT_TEMPLATE = """Produce a summary of the following {content_type} content.
+Adjust summary depth to match the content's length — short content deserves a concise summary; long content deserves a thorough one.
 
 Title: {title}
 Source: {source_name}
+Content length tier: {length_tier}
+Guideline for this tier: {tier_guideline}
 
 Content:
 {text}
 
 ---
 
-Generate a detailed structured summary in JSON format:
+Generate a structured summary in JSON format:
 {{
-  "thesis": "Core argument or main message in 2-4 sentences. Include the context and why it matters.",
+  "thesis": "Core argument or main message. Length should match the tier guideline above.",
   "key_points": [
     {{
       "topic": "Short topic label for this point",
       "speaker": "Speaker name if identifiable, otherwise null",
-      "text": "Detailed explanation of this insight, including specific examples, data, or frameworks mentioned. Be thorough — 2-4 sentences per point.",
+      "text": "Explanation of this insight with specific examples or data if available. 1-3 sentences depending on tier.",
       "timestamp": "MM:SS if available, otherwise null"
     }}
   ],
   "actionable_takeaways": [
     "Specific, concrete action the reader can take immediately"
   ],
-  "conclusion": "2-3 sentence synthesis of the overall message and its implications for the reader",
+  "conclusion": "Synthesis of the overall message. Length should match the tier guideline above.",
   "tags": ["topic1", "topic2", "topic3", "topic4", "topic5"]
 }}
 
 Requirements:
-- Extract 8-15 key points (more for longer content, fewer for shorter)
-- Each key point should be detailed (2-4 sentences), preserving specific examples, numbers, and frameworks
-- Include 3-5 actionable takeaways that the reader can apply immediately
-- Tags should be 4-6 topic keywords
-- Thesis should fully set the context (2-4 sentences)
-- Conclusion should synthesize the overall message (2-3 sentences)
+- STRICTLY follow the tier guideline for number of key points and takeaways — do NOT over-extract from short content
+- Each key point should preserve specific examples, numbers, and frameworks when present
+- Tags should be 3-5 topic keywords
 - For podcasts/interviews: capture each speaker's unique perspective
 - For tutorials/how-to: preserve step-by-step details and specific techniques"""
 
@@ -80,11 +108,14 @@ async def generate_summary(
     if len(text) > max_chars:
         text = text[:max_chars] + "\n\n[... content truncated ...]"
 
+    tier = _estimate_duration_tier(text)
     prompt = SUMMARIZE_PROMPT_TEMPLATE.format(
         content_type=content_type,
         title=title,
         source_name=source_name,
         text=text,
+        length_tier=tier,
+        tier_guideline=TIER_GUIDELINES[tier],
     )
 
     client = AsyncOpenAI(
