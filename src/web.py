@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from src.config import settings
-from src.models import Bookmark, DailyDigest, DailyQuestions, Entry, Source, Summary, get_session, init_db
+from src.models import Bookmark, DailyDigest, Entry, Source, Summary, get_session, init_db
 
 logger = logging.getLogger(__name__)
 
@@ -315,7 +315,7 @@ def _fetch_news_from_google() -> List[dict]:
             logger.warning(f"Failed to fetch Google News for query '{query}': {e}")
 
     all_news.sort(key=lambda x: x.get("published_at", ""), reverse=True)
-    return all_news[:30]
+    return all_news[:10]
 
 
 class NewsItem(BaseModel):
@@ -332,7 +332,7 @@ async def get_news():
     """获取智驾行业新闻（带1小时缓存）"""
     global _news_cache, _news_cache_time
     now = datetime.now()
-    if _news_cache and _news_cache_time and (now - _news_cache_time).seconds < 3600:
+    if _news_cache and _news_cache_time and (now - _news_cache_time).seconds < 86400:
         return _news_cache
     _news_cache = _fetch_news_from_google()
     _news_cache_time = now
@@ -348,118 +348,59 @@ async def fetch_news():
     return _news_cache
 
 
-# --- Thinking API (每日思考 - 面试问题) ---
+# --- Thinking API (每日思考 - LLM生成面试问题) ---
 
-INTERVIEW_QUESTIONS = [
-    {
-        "question": "如何评估一个海外市场的进入时机是否成熟？",
-        "context": "在海外销售中，市场时机往往决定了成败。需要从市场成熟度、竞争格局、法规政策等多维度分析。",
-        "answer": [
-            "分析目标市场的经济增长趋势和消费者购买力变化",
-            "评估本地竞争者的市场占有率和产品竞争力",
-            "研究当地的法规政策是否对外资企业友好",
-            "考察供应链和物流基础设施的完善程度",
-            "判断企业文化差异带来的进入门槛"
-        ],
-        "tips": "建议用数据支撑你的分析，展示你对市场调研方法的理解"
-    },
-    {
-        "question": "如果客户对价格敏感，你会如何进行价值销售？",
-        "context": "海外客户往往对价格非常敏感，如何在价格谈判中突出产品价值是关键能力。",
-        "answer": [
-            "先了解客户的具体痛点和业务目标",
-            "用ROI计算展示产品带来的长期收益",
-            "强调独特的技术优势和服务保障",
-            "提供分阶段付款或试用方案降低风险",
-            "分享同行业成功案例增强信心"
-        ],
-        "tips": "准备2-3个真实的价格谈判案例，展示你的谈判技巧"
-    },
-    {
-        "question": "你如何处理跨文化沟通中的误解？",
-        "context": "海外销售需要与不同文化背景的客户打交道，文化敏感度是必备能力。",
-        "answer": [
-            "主动学习和了解目标市场的文化习俗",
-            "保持开放心态，不预设立场",
-            "遇到误解时，耐心倾听并确认理解",
-            "使用简单清晰的语言，避免俚语和文化隐喻",
-            "必要时寻求本地同事或翻译的帮助"
-        ],
-        "tips": "可以举一个你成功化解跨文化冲突的具体例子"
-    },
-    {
-        "question": "如何制定一个新市场的销售策略？",
-        "context": "制定新市场策略需要综合考虑市场分析、渠道选择、团队建设等多个方面。",
-        "answer": [
-            "进行市场调研，了解市场规模和竞争格局",
-            "确定目标客户群体和购买决策流程",
-            "选择合适的销售渠道（直销/代理商/线上）",
-            "制定本地化的营销推广计划",
-            "建立销售团队和培训体系"
-        ],
-        "tips": "最好准备一个你参与过的新市场开拓案例"
-    },
-    {
-        "question": "你如何看待竞争对手？如何应对价格战？",
-        "context": "海外市场竞争激烈，如何正确看待竞争并制定应对策略。",
-        "answer": [
-            "尊重竞争对手，学习他们的优势",
-            "不盲目打价格战，聚焦差异化价值",
-            "深入了解客户需求，提供定制化方案",
-            "强化服务壁垒，提升客户粘性",
-            "必要时寻求总部资源支持"
-        ],
-        "tips": "用具体案例说明你如何应对过价格竞争"
-    },
-    {
-        "question": "如何建立和维护海外大客户关系？",
-        "context": "大客户是海外销售的重要资源，需要系统化的关系管理方法。",
-        "answer": [
-            "深入了解客户组织架构和决策流程",
-            "定期拜访保持沟通，建立信任",
-            "提供超出期望的服务支持",
-            "邀请客户参观公司或工厂增强信心",
-            "建立多层级关系，不依赖单一联系人"
-        ],
-        "tips": "准备一个你成功维护大客户关系的故事"
-    },
-    {
-        "question": "如果产品在海外市场出现问题，你会如何处理？",
-        "context": "海外售后和危机处理能力是考察重点，展示你的问题解决能力。",
-        "answer": [
-            "第一时间响应客户，展示负责态度",
-            "快速定位问题根源，评估影响范围",
-            "提供临时解决方案减少客户损失",
-            "协调总部资源进行根本性修复",
-            "事后总结并优化流程避免复发"
-        ],
-        "tips": "建议准备一个具体的危机处理案例"
-    },
-    {
-        "question": "你如何利用数据驱动销售决策？",
-        "context": "现代销售越来越依赖数据分析能力，展示你的数据思维。",
-        "answer": [
-            "建立销售漏斗，追踪各阶段转化率",
-            "分析客户行为数据优化触达策略",
-            "用CRM系统管理客户信息和跟进记录",
-            "定期复盘销售数据找出改进机会",
-            "预测销售趋势，提前调整资源"
-        ],
-        "tips": "准备具体的数据分析案例和改进成果"
-    },
-    {
-        "question": "如何与海外代理商/经销商合作？",
-        "context": "渠道管理是海外销售的重要技能，需要展示你的渠道合作经验。",
-        "answer": [
-            "选择有实力且价值观匹配的合作伙伴",
-            "明确合作条款和双方权责",
-            "提供充分的产品培训和销售支持",
-            "建立定期沟通机制，解决问题",
-            "设置合理的销售目标和激励政策"
-        ],
-        "tips": "如有渠道管理经验，一定要用具体案例说明"
-    }
+_thinking_cache: List[dict] = []
+_thinking_cache_date: Optional[date] = None
+
+THINKING_PROMPT = """你是一位资深的出海销售面试教练。请生成3个高质量的出海/海外销售行业面试问题。
+
+要求：
+1. 每个问题都要有实际深度，不要泛泛而谈
+2. 覆盖不同维度：如市场开拓、客户管理、谈判技巧、跨文化沟通、渠道管理、竞品分析、数据驱动、团队管理等
+3. 今天的日期是 {today}，可以结合近期行业热点（如新能源出海、东南亚/中东/拉美市场、AI赋能销售等）
+4. 问题要有挑战性，适合中高级候选人
+
+返回 JSON 数组，每个元素格式：
+[
+  {{
+    "question": "面试问题",
+    "context": "问题背景说明（为什么会问这个问题，考察什么能力）",
+    "answer": ["要点1", "要点2", "要点3", "要点4", "要点5"],
+    "tips": "答题技巧提示"
+  }}
 ]
+
+只返回 JSON，不要其他内容。"""
+
+
+async def _generate_thinking_questions() -> List[dict]:
+    """Use LLM to generate daily interview questions."""
+    from openai import AsyncOpenAI
+
+    client = AsyncOpenAI(
+        base_url=settings.llm_base_url,
+        api_key=settings.anthropic_auth_token,
+    )
+
+    try:
+        response = await client.chat.completions.create(
+            model=settings.llm_model,
+            messages=[{"role": "user", "content": THINKING_PROMPT.format(today=date.today().isoformat())}],
+            temperature=0.8,
+            max_tokens=2000,
+            timeout=30,
+        )
+        content = response.choices[0].message.content.strip()
+        if content.startswith("```"):
+            content = content.split("\n", 1)[1]
+            if content.endswith("```"):
+                content = content[:-3]
+            content = content.strip()
+        return json.loads(content)
+    except Exception as e:
+        logger.error(f"Failed to generate thinking questions: {e}")
+        return []
 
 
 class QuestionItem(BaseModel):
@@ -471,112 +412,23 @@ class QuestionItem(BaseModel):
 
 @app.get("/api/thinking/questions", response_model=List[QuestionItem])
 async def get_questions():
-    """获取今日面试问题"""
-    session = get_session()
-    try:
-        today = date.today()
-        # 检查是否已有今日问题记录
-        record = session.query(DailyQuestions).filter(
-            DailyQuestions.question_date == today
-        ).first()
-
-        if record:
-            questions = record.get_questions()
-            return [QuestionItem(**q) for q in questions]
-
-        # 生成新问题并保存
-        random.seed(today.toordinal())
-        selected = random.sample(INTERVIEW_QUESTIONS, 3)
-
-        # 保存到数据库
-        new_record = DailyQuestions(question_date=today)
-        new_record.set_questions(selected)
-        session.add(new_record)
-        session.commit()
-
-        return [QuestionItem(**q) for q in selected]
-    finally:
-        session.close()
+    """获取今日面试问题（每天缓存）"""
+    global _thinking_cache, _thinking_cache_date
+    today = date.today()
+    if _thinking_cache and _thinking_cache_date == today:
+        return _thinking_cache
+    _thinking_cache = await _generate_thinking_questions()
+    _thinking_cache_date = today
+    return _thinking_cache
 
 
 @app.post("/api/thinking/generate", response_model=List[QuestionItem])
 async def generate_questions():
-    """生成新的面试问题（仅当今日还没有问题时）"""
-    session = get_session()
-    try:
-        today = date.today()
-        # 检查是否已有今日问题记录
-        record = session.query(DailyQuestions).filter(
-            DailyQuestions.question_date == today
-        ).first()
-
-        if record:
-            # 返回已存在的问题
-            questions = record.get_questions()
-            return [QuestionItem(**q) for q in questions]
-
-        # 生成新问题并保存
-        random.seed(today.toordinal())
-        selected = random.sample(INTERVIEW_QUESTIONS, 3)
-
-        # 保存到数据库
-        new_record = DailyQuestions(question_date=today)
-        new_record.set_questions(selected)
-        session.add(new_record)
-        session.commit()
-
-        return [QuestionItem(**q) for q in selected]
-    finally:
-        session.close()
-
-
-class DailyQuestionsResponse(BaseModel):
-    date: str
-    questions: List[QuestionItem]
-
-
-@app.get("/api/thinking/history", response_model=List[DailyQuestionsResponse])
-async def get_question_history(limit: int = 30):
-    """获取历史问题记录"""
-    session = get_session()
-    try:
-        records = session.query(DailyQuestions).order_by(
-            DailyQuestions.question_date.desc()
-        ).limit(limit).all()
-
-        result = []
-        for r in records:
-            questions = r.get_questions()
-            result.append(DailyQuestionsResponse(
-                date=str(r.question_date),
-                questions=[QuestionItem(**q) for q in questions]
-            ))
-
-        return result
-    finally:
-        session.close()
-
-
-@app.get("/api/thinking/history/{date_str}", response_model=DailyQuestionsResponse)
-async def get_questions_by_date(date_str: str):
-    """获取指定日期的问题"""
-    session = get_session()
-    try:
-        target_date = datetime.strptime(date_str, "%Y-%m-%d").date()
-        record = session.query(DailyQuestions).filter(
-            DailyQuestions.question_date == target_date
-        ).first()
-
-        if not record:
-            raise HTTPException(status_code=404, detail="No questions found for this date")
-
-        questions = record.get_questions()
-        return DailyQuestionsResponse(
-            date=str(record.question_date),
-            questions=[QuestionItem(**q) for q in questions]
-        )
-    finally:
-        session.close()
+    """强制生成新问题"""
+    global _thinking_cache, _thinking_cache_date
+    _thinking_cache = await _generate_thinking_questions()
+    _thinking_cache_date = date.today()
+    return _thinking_cache
 
 
 # --- Helpers ---
