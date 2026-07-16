@@ -448,33 +448,42 @@ async def get_questions_by_date(date_str: str):
     raise HTTPException(status_code=404, detail="No questions found for this date")
 
 
-# --- Translation API (MyMemory - free, no API key, works from China) ---
+# --- Translation API (LLM-powered, single-call batch translation) ---
 
 _translation_cache: dict = {}
 
 
-def _translate_text(text: str, target: str = "zh-CN") -> str:
-    """Translate text using MyMemory free API (accessible from China)."""
-    if not text or not text.strip():
-        return text
+def _llm_translate_batch(sections: dict) -> dict:
+    """Translate all sections in a single LLM call for natural Chinese output."""
     import urllib.request
-    import urllib.parse
-    chunk = text[:4500]
-    params = urllib.parse.urlencode({
-        "q": chunk, "langpair": f"en|{target}",
-        "de": "content-digest@app.local",
+    prompt = (
+        "将以下 JSON 中所有英文内容翻译为流畅自然的中文。"
+        "保持 JSON 结构不变，只翻译 value（字符串值），不翻译 key。"
+        "翻译要求：意译为主，语言流畅地道，不要有机翻痕迹，"
+        "专业术语保持准确，必要时保留英文原文。"
+        "直接返回翻译后的 JSON，不要添加任何解释或 markdown 格式。\n\n"
+        + json.dumps(sections, ensure_ascii=False, indent=2)
+    )
+    payload = json.dumps({
+        "model": settings.llm_model,
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": settings.llm_max_tokens,
+        "temperature": 0.3,
+    }).encode()
+    url = settings.llm_base_url.rstrip("/") + "/chat/completions"
+    req = urllib.request.Request(url, data=payload, headers={
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {settings.anthropic_auth_token}",
     })
-    url = f"https://api.mymemory.translated.net/get?{params}"
-    try:
-        req = urllib.request.Request(url, headers={"User-Agent": "ContentDigest/1.0"})
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            data = json.loads(resp.read())
-            translated = data.get("responseData", {}).get("translatedText", "")
-            if translated and data.get("responseStatus") == 200:
-                return translated
-    except Exception as e:
-        logger.warning(f"MyMemory translate failed: {e}")
-    return text
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        data = json.loads(resp.read())
+        content = data["choices"][0]["message"]["content"].strip()
+        # Strip markdown code fences if present
+        if content.startswith("```"):
+            content = content.split("\n", 1)[1] if "\n" in content else content[3:]
+            if content.endswith("```"):
+                content = content[:-3].strip()
+        return json.loads(content)
 
 
 @app.post("/api/entries/{entry_id}/translate")
@@ -491,56 +500,29 @@ async def translate_entry(entry_id: int):
             raise HTTPException(status_code=400, detail="No summary to translate")
 
         summary = entry.summary
-        key_points_orig = summary.get_key_points()
-        takeaways_orig = summary.get_actionable_takeaways()
-        tags_orig = summary.get_tags()
+        sections = {
+            "title": entry.title,
+            "thesis": summary.thesis or "",
+            "conclusion": summary.conclusion or "",
+            "key_points": [
+                {"topic": p.get("topic", ""), "text": p.get("text", "")}
+                for p in summary.get_key_points()
+            ],
+            "actionable_takeaways": summary.get_actionable_takeaways(),
+            "tags": summary.get_tags(),
+        }
 
         import asyncio
         loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, _llm_translate_batch, sections)
 
-        all_texts = [
-            entry.title,
-            summary.thesis or "",
-            summary.conclusion or "",
-        ]
-        for p in key_points_orig:
-            all_texts.append(p.get("topic", ""))
-            all_texts.append(p.get("text", ""))
-        for t in takeaways_orig:
-            all_texts.append(t)
-        for tag in tags_orig:
-            all_texts.append(tag)
+        kp_orig = summary.get_key_points()
+        for i, kp in enumerate(result.get("key_points", [])):
+            if i < len(kp_orig):
+                kp["timestamp"] = kp_orig[i].get("timestamp", "")
 
-        results = await asyncio.gather(
-            *[loop.run_in_executor(None, _translate_text, t) for t in all_texts]
-        )
-
-        idx = 0
-        title_t = results[idx]; idx += 1
-        thesis_t = results[idx]; idx += 1
-        conclusion_t = results[idx]; idx += 1
-
-        kp_translated = []
-        for p in key_points_orig:
-            topic_t = results[idx]; idx += 1
-            text_t = results[idx]; idx += 1
-            kp_translated.append({
-                "topic": topic_t, "text": text_t,
-                "timestamp": p.get("timestamp", ""),
-            })
-
-        takeaways_t = [results[idx + i] for i in range(len(takeaways_orig))]
-        idx += len(takeaways_orig)
-        tags_t = [results[idx + i] for i in range(len(tags_orig))]
-
-        translated = {
-            "title": title_t, "thesis": thesis_t,
-            "key_points": kp_translated,
-            "actionable_takeaways": takeaways_t,
-            "conclusion": conclusion_t, "tags": tags_t,
-        }
-        _translation_cache[entry_id] = translated
-        return translated
+        _translation_cache[entry_id] = result
+        return result
     except HTTPException:
         raise
     except Exception as e:

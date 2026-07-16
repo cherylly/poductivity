@@ -276,7 +276,7 @@ function EntryDetail() {
               disabled={translating}
               className={`btn btn-translate ${showTranslation ? 'active' : ''}`}
             >
-              {translating ? '翻译中...' : showTranslation ? '显示原文' : '翻译为中文'}
+              {translating ? '正在AI翻译(约15-30秒)...' : showTranslation ? '显示原文' : '翻译为中文'}
             </button>
           )}
         </div>
