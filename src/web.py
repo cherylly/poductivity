@@ -251,100 +251,71 @@ async def list_bookmarks():
 
 # --- News API (智驾行业新闻) ---
 
-NEWS_RSS_SOURCES = [
-    {
-        "name": "36氪",
-        "rss": "https://36kr.com/feed",
-        "keywords": [
-            "自动驾驶", "智驾", "智能驾驶", "无人驾驶", "Robotaxi", "激光雷达",
-            "毫末", "小马智行", "文远知行", "百度Apollo", "Waymo", "Cruise",
-            "FSD", "NOA", "城市领航", "高速领航", "车路协同",
-            "蔚来", "小鹏", "理想汽车", "华为智驾", "比亚迪",
-            "L2+", "L3", "L4", "端到端",
-        ],
-    },
-    {
-        "name": "爱范儿",
-        "rss": "https://www.ifanr.com/feed",
-        "keywords": [
-            "自动驾驶", "智驾", "智能驾驶", "无人驾驶",
-            "特斯拉", "Waymo", "Robotaxi", "FSD",
-            "蔚来", "小鹏", "理想", "华为",
-        ],
-    },
-    {
-        "name": "TechCrunch",
-        "rss": "https://techcrunch.com/category/transportation/feed/",
-        "keywords": [
-            "autonomous", "self-driving", "robotaxi", "lidar",
-            "waymo", "cruise", "tesla", "fsd", "adas",
-        ],
-    },
-    {
-        "name": "The Verge",
-        "rss": "https://www.theverge.com/rss/transportation/index.xml",
-        "keywords": [
-            "autonomous", "self-driving", "robotaxi", "waymo",
-            "tesla", "autopilot", "fsd", "lidar",
-        ],
-    },
+GOOGLE_NEWS_QUERIES = [
+    "自动驾驶 OR 智驾 OR Robotaxi OR 无人驾驶",
+    "autonomous driving OR self-driving OR robotaxi",
 ]
 
 _news_cache: List[dict] = []
 _news_cache_time: Optional[datetime] = None
 
 
-def _fetch_news_from_rss() -> List[dict]:
-    """Fetch real news from RSS feeds, filtered by autonomous driving keywords."""
+def _fetch_news_from_google() -> List[dict]:
+    """Fetch autonomous driving news from Google News RSS search."""
+    import urllib.parse
+    from time import mktime
+    from bs4 import BeautifulSoup
+
     all_news = []
-    for src in NEWS_RSS_SOURCES:
+    seen_titles = set()
+
+    for query in GOOGLE_NEWS_QUERIES:
+        encoded = urllib.parse.quote(query)
+        is_cn = any(c > "\u4e00" for c in query)
+        if is_cn:
+            url = f"https://news.google.com/rss/search?q={encoded}&hl=zh-CN&gl=CN&ceid=CN:zh-Hans"
+        else:
+            url = f"https://news.google.com/rss/search?q={encoded}&hl=en-US&gl=US&ceid=US:en"
+
         try:
-            feed = feedparser.parse(src["rss"])
-            keywords = src.get("keywords", [])
-            for entry in feed.entries[:30]:
-                title = getattr(entry, "title", "")
-                summary = getattr(entry, "summary", "") or getattr(entry, "description", "")
-                text_to_check = (title + " " + summary).lower()
-                if keywords:
-                    core_kw = [
-                        "自动驾驶", "智驾", "智能驾驶", "无人驾驶", "robotaxi",
-                        "autonomous", "self-driving", "fsd", "noa", "lidar",
-                        "激光雷达", "端到端", "adas", "waymo",
-                    ]
-                    title_lower = title.lower()
-                    has_core_in_title = any(k in title_lower for k in core_kw)
-                    if has_core_in_title:
-                        pass
-                    else:
-                        hits = sum(1 for kw in keywords if kw.lower() in text_to_check)
-                        if hits < 2:
-                            continue
+            feed = feedparser.parse(url)
+            for entry in feed.entries[:40]:
+                title = getattr(entry, "title", "").strip()
+                if not title or title in seen_titles:
+                    continue
+                seen_titles.add(title)
+
+                src_obj = getattr(entry, "source", None)
+                source_name = ""
+                if src_obj:
+                    source_name = getattr(src_obj, "title", "") or src_obj.get("title", "")
+
+                # Clean " - SourceName" suffix from title if source is known
+                if source_name and title.endswith(f" - {source_name}"):
+                    title = title[: -(len(source_name) + 3)].strip()
 
                 published = ""
                 if hasattr(entry, "published_parsed") and entry.published_parsed:
-                    from time import mktime
-                    published = datetime.fromtimestamp(mktime(entry.published_parsed)).strftime("%Y-%m-%d")
-                elif hasattr(entry, "updated_parsed") and entry.updated_parsed:
-                    from time import mktime
-                    published = datetime.fromtimestamp(mktime(entry.updated_parsed)).strftime("%Y-%m-%d")
+                    published = datetime.fromtimestamp(mktime(entry.published_parsed)).strftime("%Y-%m-%d %H:%M")
 
-                from bs4 import BeautifulSoup
-                clean_summary = BeautifulSoup(summary, "html.parser").get_text()[:300] if summary else ""
+                summary_raw = getattr(entry, "summary", "") or ""
+                clean_summary = BeautifulSoup(summary_raw, "html.parser").get_text()[:300]
+
+                link = getattr(entry, "link", "")
 
                 all_news.append({
                     "title": title,
-                    "source": src["name"],
+                    "source": source_name,
                     "published_at": published,
-                    "url": getattr(entry, "link", ""),
+                    "url": link,
                     "summary": clean_summary,
                     "tags": [],
                 })
         except Exception as e:
-            logger.warning(f"Failed to fetch RSS from {src['name']}: {e}")
-            continue
+            logger.warning(f"Failed to fetch Google News for query '{query}': {e}")
 
     all_news.sort(key=lambda x: x.get("published_at", ""), reverse=True)
-    return all_news[:50]
+    return all_news[:30]
 
 
 class NewsItem(BaseModel):
@@ -363,7 +334,7 @@ async def get_news():
     now = datetime.now()
     if _news_cache and _news_cache_time and (now - _news_cache_time).seconds < 3600:
         return _news_cache
-    _news_cache = _fetch_news_from_rss()
+    _news_cache = _fetch_news_from_google()
     _news_cache_time = now
     return _news_cache
 
@@ -372,7 +343,7 @@ async def get_news():
 async def fetch_news():
     """强制刷新新闻"""
     global _news_cache, _news_cache_time
-    _news_cache = _fetch_news_from_rss()
+    _news_cache = _fetch_news_from_google()
     _news_cache_time = datetime.now()
     return _news_cache
 
