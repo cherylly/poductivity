@@ -42,6 +42,70 @@
 
 .action-bar {
   margin-bottom: 24px;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.action-bar .btn {
+  flex-shrink: 0;
+}
+
+.history-section {
+  margin-bottom: 32px;
+}
+
+.history-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--rule-subtle);
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.history-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  background: var(--paper-warm);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+  border: 1px solid transparent;
+}
+
+.history-item:hover {
+  background: var(--paper-white);
+  border-color: var(--accent);
+}
+
+.history-date {
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.history-count {
+  font-size: 13px;
+  color: var(--ink-faded);
+}
+
+.selected-date-header {
+  margin-bottom: 24px;
+  padding: 16px;
+  background: var(--paper-warm);
+  border-radius: 8px;
+}
+
+.selected-date-header h2 {
+  margin-top: 12px;
+  font-size: 18px;
 }
 
 .questions-list {
