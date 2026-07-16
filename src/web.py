@@ -431,6 +431,23 @@ async def generate_questions():
     return _thinking_cache
 
 
+class DailyQuestionsResponse(BaseModel):
+    date: str
+    questions: List[QuestionItem]
+
+
+@app.get("/api/thinking/history", response_model=List[DailyQuestionsResponse])
+async def get_question_history(limit: int = 30):
+    """历史记录（LLM模式下不持久化，返回空列表）"""
+    return []
+
+
+@app.get("/api/thinking/history/{date_str}", response_model=DailyQuestionsResponse)
+async def get_questions_by_date(date_str: str):
+    """获取指定日期的问题（LLM模式下不持久化）"""
+    raise HTTPException(status_code=404, detail="No questions found for this date")
+
+
 # --- Translation API (Google Translate, fast) ---
 
 _translation_cache: dict = {}
