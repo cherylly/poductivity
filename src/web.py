@@ -448,27 +448,33 @@ async def get_questions_by_date(date_str: str):
     raise HTTPException(status_code=404, detail="No questions found for this date")
 
 
-# --- Translation API (Google Translate, fast) ---
+# --- Translation API (MyMemory - free, no API key, works from China) ---
 
 _translation_cache: dict = {}
 
 
-def _google_translate(text: str, target: str = "zh-CN") -> str:
-    """Translate text using free Google Translate API."""
+def _translate_text(text: str, target: str = "zh-CN") -> str:
+    """Translate text using MyMemory free API (accessible from China)."""
     if not text or not text.strip():
         return text
     import urllib.request
     import urllib.parse
-    encoded = urllib.parse.quote(text[:4500])
-    url = f"https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl={target}&dt=t&q={encoded}"
+    chunk = text[:4500]
+    params = urllib.parse.urlencode({
+        "q": chunk, "langpair": f"en|{target}",
+        "de": "content-digest@app.local",
+    })
+    url = f"https://api.mymemory.translated.net/get?{params}"
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        req = urllib.request.Request(url, headers={"User-Agent": "ContentDigest/1.0"})
+        with urllib.request.urlopen(req, timeout=15) as resp:
             data = json.loads(resp.read())
-            return "".join(seg[0] for seg in data[0] if seg[0])
+            translated = data.get("responseData", {}).get("translatedText", "")
+            if translated and data.get("responseStatus") == 200:
+                return translated
     except Exception as e:
-        logger.warning(f"Google translate failed: {e}")
-        return text
+        logger.warning(f"MyMemory translate failed: {e}")
+    return text
 
 
 @app.post("/api/entries/{entry_id}/translate")
@@ -492,35 +498,46 @@ async def translate_entry(entry_id: int):
         import asyncio
         loop = asyncio.get_event_loop()
 
-        title_t = await loop.run_in_executor(None, _google_translate, entry.title)
-        thesis_t = await loop.run_in_executor(None, _google_translate, summary.thesis or "")
-        conclusion_t = await loop.run_in_executor(None, _google_translate, summary.conclusion or "")
+        all_texts = [
+            entry.title,
+            summary.thesis or "",
+            summary.conclusion or "",
+        ]
+        for p in key_points_orig:
+            all_texts.append(p.get("topic", ""))
+            all_texts.append(p.get("text", ""))
+        for t in takeaways_orig:
+            all_texts.append(t)
+        for tag in tags_orig:
+            all_texts.append(tag)
+
+        results = await asyncio.gather(
+            *[loop.run_in_executor(None, _translate_text, t) for t in all_texts]
+        )
+
+        idx = 0
+        title_t = results[idx]; idx += 1
+        thesis_t = results[idx]; idx += 1
+        conclusion_t = results[idx]; idx += 1
 
         kp_translated = []
         for p in key_points_orig:
-            topic_t = await loop.run_in_executor(None, _google_translate, p.get("topic", "")) if p.get("topic") else ""
-            text_t = await loop.run_in_executor(None, _google_translate, p.get("text", ""))
+            topic_t = results[idx]; idx += 1
+            text_t = results[idx]; idx += 1
             kp_translated.append({
-                "topic": topic_t,
-                "text": text_t,
+                "topic": topic_t, "text": text_t,
                 "timestamp": p.get("timestamp", ""),
             })
 
-        takeaways_t = []
-        for t in takeaways_orig:
-            takeaways_t.append(await loop.run_in_executor(None, _google_translate, t))
-
-        tags_t = []
-        for tag in tags_orig:
-            tags_t.append(await loop.run_in_executor(None, _google_translate, tag))
+        takeaways_t = [results[idx + i] for i in range(len(takeaways_orig))]
+        idx += len(takeaways_orig)
+        tags_t = [results[idx + i] for i in range(len(tags_orig))]
 
         translated = {
-            "title": title_t,
-            "thesis": thesis_t,
+            "title": title_t, "thesis": thesis_t,
             "key_points": kp_translated,
             "actionable_takeaways": takeaways_t,
-            "conclusion": conclusion_t,
-            "tags": tags_t,
+            "conclusion": conclusion_t, "tags": tags_t,
         }
         _translation_cache[entry_id] = translated
         return translated

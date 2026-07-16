@@ -222,40 +222,12 @@ function EntryDetail() {
     }
     setTranslating(true)
     try {
-      const s = entry.summary
-      const textsToTranslate = [
-        entry.title,
-        s.thesis || '',
-        s.conclusion || '',
-        ...(s.key_points || []).map(p => p.topic || ''),
-        ...(s.key_points || []).map(p => p.text || ''),
-        ...(s.actionable_takeaways || []),
-        ...(s.tags || []),
-      ]
-      const results = await translateBatch(textsToTranslate)
-
-      let idx = 0
-      const kpCount = (s.key_points || []).length
-      const taCount = (s.actionable_takeaways || []).length
-      const tagCount = (s.tags || []).length
-
-      const data = {
-        title: results[idx++],
-        thesis: results[idx++],
-        conclusion: results[idx++],
-        key_points: (s.key_points || []).map((p, i) => ({
-          topic: results[idx + i],
-          text: results[idx + kpCount + i],
-          timestamp: p.timestamp || '',
-        })),
-        actionable_takeaways: results.slice(idx + kpCount * 2, idx + kpCount * 2 + taCount),
-        tags: results.slice(idx + kpCount * 2 + taCount, idx + kpCount * 2 + taCount + tagCount),
-      }
+      const data = await translateViaBackend(id)
       setTranslated(data)
       setShowTranslation(true)
     } catch (e) {
       console.error('Translation failed:', e)
-      alert('翻译失败，请确保网络可以访问 Google 翻译')
+      alert('翻译失败，请稍后重试')
     }
     setTranslating(false)
   }
@@ -497,30 +469,10 @@ function Sources() {
   )
 }
 
-async function translateOne(text) {
-  if (!text || !text.trim()) return text
-  const chunk = text.slice(0, 4000)
-  const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=zh-CN&dt=t&q=${encodeURIComponent(chunk)}`
-  const ctrl = new AbortController()
-  const timer = setTimeout(() => ctrl.abort(), 8000)
-  try {
-    const res = await fetch(url, { signal: ctrl.signal })
-    const data = await res.json()
-    return data[0].map(seg => seg[0]).join('')
-  } finally {
-    clearTimeout(timer)
-  }
-}
-
-async function translateBatch(texts) {
-  const BATCH = 5
-  const results = new Array(texts.length)
-  for (let i = 0; i < texts.length; i += BATCH) {
-    const slice = texts.slice(i, i + BATCH)
-    const batch = await Promise.all(slice.map(t => translateOne(t).catch(() => t)))
-    batch.forEach((r, j) => { results[i + j] = r })
-  }
-  return results
+async function translateViaBackend(entryId) {
+  const res = await fetch(`${API}/entries/${entryId}/translate`, { method: 'POST' })
+  if (!res.ok) throw new Error(`Backend translate failed: ${res.status}`)
+  return res.json()
 }
 
 function getTimestampLink(url, timestamp) {
