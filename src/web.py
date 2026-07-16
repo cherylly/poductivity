@@ -499,6 +499,13 @@ async def translate_entry(entry_id: int):
         if not entry.summary:
             raise HTTPException(status_code=400, detail="No summary to translate")
 
+        # Check pre-translated result in database
+        pre = entry.summary.get_translation()
+        if pre:
+            _translation_cache[entry_id] = pre
+            return pre
+
+        # Fallback: translate on-demand via LLM
         summary = entry.summary
         sections = {
             "title": entry.title,
@@ -520,6 +527,10 @@ async def translate_entry(entry_id: int):
         for i, kp in enumerate(result.get("key_points", [])):
             if i < len(kp_orig):
                 kp["timestamp"] = kp_orig[i].get("timestamp", "")
+
+        # Save to database for next time
+        summary.set_translation(result)
+        session.commit()
 
         _translation_cache[entry_id] = result
         return result

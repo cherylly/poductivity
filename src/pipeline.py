@@ -54,7 +54,11 @@ async def run_daily_pipeline():
         summarized = await summarize_entries(session, entries_to_summarize)
         logger.info(f"Summarized {summarized} entries")
 
-        # Step 5: Create daily digest record
+        # Step 5: Pre-translate new summaries to Chinese
+        translated = await translate_new_summaries(session)
+        logger.info(f"Pre-translated {translated} summaries")
+
+        # Step 6: Create daily digest record
         done_entries = (
             session.query(Entry)
             .filter(Entry.status == "done")
@@ -65,7 +69,7 @@ async def run_daily_pipeline():
         )
         digest = create_daily_digest(session, done_entries)
 
-        # Step 6: Send email
+        # Step 7: Send email
         if digest and done_entries:
             send_digest_email(session, digest)
 
@@ -252,6 +256,93 @@ async def summarize_entries(session, entries: list[Entry]) -> int:
             entry.status = "failed"
             entry.error_message = str(e)
             logger.error(f"Failed to summarize '{entry.title}': {e}")
+
+    session.commit()
+    return count
+
+
+async def translate_new_summaries(session) -> int:
+    """Pre-translate untranslated summaries to Chinese using LLM."""
+    import urllib.request
+
+    untranslated = (
+        session.query(Summary)
+        .filter(Summary.translated_json.is_(None))
+        .filter(Summary.thesis.isnot(None))
+        .order_by(Summary.created_at.desc())
+        .limit(30)
+        .all()
+    )
+
+    if not untranslated:
+        return 0
+
+    logger.info(f"Pre-translating {len(untranslated)} summaries...")
+    count = 0
+
+    for summary in untranslated:
+        entry = session.query(Entry).get(summary.entry_id)
+        if not entry:
+            continue
+
+        sections = {
+            "title": entry.title,
+            "thesis": summary.thesis or "",
+            "conclusion": summary.conclusion or "",
+            "key_points": [
+                {"topic": p.get("topic", ""), "text": p.get("text", "")}
+                for p in summary.get_key_points()
+            ],
+            "actionable_takeaways": summary.get_actionable_takeaways(),
+            "tags": summary.get_tags(),
+        }
+
+        prompt = (
+            "将以下 JSON 中所有英文内容翻译为流畅自然的中文。"
+            "保持 JSON 结构不变，只翻译 value（字符串值），不翻译 key。"
+            "翻译要求：意译为主，语言流畅地道，不要有机翻痕迹，"
+            "专业术语保持准确，必要时保留英文原文。"
+            "直接返回翻译后的 JSON，不要添加任何解释或 markdown 格式。\n\n"
+            + json.dumps(sections, ensure_ascii=False, indent=2)
+        )
+
+        payload = json.dumps({
+            "model": settings.llm_model,
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": settings.llm_max_tokens,
+            "temperature": 0.3,
+        }).encode()
+
+        url = settings.llm_base_url.rstrip("/") + "/chat/completions"
+        req = urllib.request.Request(url, data=payload, headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {settings.anthropic_auth_token}",
+        })
+
+        try:
+            with urllib.request.urlopen(req, timeout=90) as resp:
+                data = json.loads(resp.read())
+                content = data["choices"][0]["message"]["content"].strip()
+                if content.startswith("```"):
+                    content = content.split("\n", 1)[1] if "\n" in content else content[3:]
+                    if content.endswith("```"):
+                        content = content[:-3].strip()
+                result = json.loads(content)
+                kp_orig = summary.get_key_points()
+                for i, kp in enumerate(result.get("key_points", [])):
+                    if i < len(kp_orig):
+                        kp["timestamp"] = kp_orig[i].get("timestamp", "")
+                summary.set_translation(result)
+                count += 1
+                logger.info(f"Translated [{count}/{len(untranslated)}]: {entry.title[:50]}")
+
+                if count % 5 == 0:
+                    session.commit()
+
+        except Exception as e:
+            logger.error(f"Translation failed for '{entry.title}': {e}")
+
+        await asyncio.sleep(1)
 
     session.commit()
     return count

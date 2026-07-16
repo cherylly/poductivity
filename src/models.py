@@ -67,10 +67,17 @@ class Summary(Base):
     conclusion = Column(Text, nullable=False)
     actionable_takeaways = Column(Text)  # JSON array
     tags = Column(Text)  # JSON array
+    translated_json = Column(Text)  # cached Chinese translation (JSON)
     word_count = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     entry = relationship("Entry", back_populates="summary")
+
+    def get_translation(self) -> dict | None:
+        return json.loads(self.translated_json) if self.translated_json else None
+
+    def set_translation(self, data: dict):
+        self.translated_json = json.dumps(data, ensure_ascii=False)
 
     def get_key_points(self) -> list[dict]:
         return json.loads(self.key_points) if self.key_points else []
