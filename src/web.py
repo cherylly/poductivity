@@ -431,6 +431,97 @@ async def generate_questions():
     return _thinking_cache
 
 
+# --- Translation API ---
+
+_translation_cache: dict = {}
+
+TRANSLATE_PROMPT = """将以下英文内容翻译成简体中文。保持原有格式和结构，只翻译文本内容。
+如果内容已经是中文，则原样返回。
+
+返回纯 JSON，格式如下：
+{{
+  "title": "翻译后的标题",
+  "thesis": "翻译后的摘要",
+  "key_points": [
+    {{"topic": "翻译后的主题", "text": "翻译后的内容", "timestamp": "保留原始时间戳"}}
+  ],
+  "actionable_takeaways": ["翻译后的要点1", "翻译后的要点2"],
+  "conclusion": "翻译后的总结",
+  "tags": ["翻译后的标签1", "翻译后的标签2"]
+}}
+
+需要翻译的内容：
+标题: {title}
+摘要: {thesis}
+关键要点: {key_points}
+可执行要点: {takeaways}
+总结: {conclusion}
+标签: {tags}
+
+只返回JSON，不要其他内容。"""
+
+
+@app.post("/api/entries/{entry_id}/translate")
+async def translate_entry(entry_id: int):
+    if entry_id in _translation_cache:
+        return _translation_cache[entry_id]
+
+    session = get_session()
+    try:
+        entry = session.query(Entry).get(entry_id)
+        if not entry:
+            raise HTTPException(status_code=404, detail="Entry not found")
+        if not entry.summary:
+            raise HTTPException(status_code=400, detail="No summary to translate")
+
+        summary = entry.summary
+        kp_text = json.dumps(
+            [{"topic": p.get("topic", ""), "text": p.get("text", ""), "timestamp": p.get("timestamp", "")}
+             for p in summary.get_key_points()],
+            ensure_ascii=False)
+        takeaways_text = json.dumps(summary.get_actionable_takeaways(), ensure_ascii=False)
+        tags_text = json.dumps(summary.get_tags(), ensure_ascii=False)
+
+        prompt = TRANSLATE_PROMPT.format(
+            title=entry.title,
+            thesis=summary.thesis or "",
+            key_points=kp_text,
+            takeaways=takeaways_text,
+            conclusion=summary.conclusion or "",
+            tags=tags_text)
+
+        from openai import AsyncOpenAI
+        client = AsyncOpenAI(
+            base_url=settings.llm_base_url,
+            api_key=settings.anthropic_auth_token,
+        )
+
+        response = await client.chat.completions.create(
+            model=settings.llm_model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3,
+            max_tokens=3000,
+            timeout=60,
+        )
+        content = response.choices[0].message.content.strip()
+        if content.startswith("```"):
+            content = content.split("\n", 1)[1]
+            if content.endswith("```"):
+                content = content[:-3]
+            content = content.strip()
+
+        translated = json.loads(content)
+        _translation_cache[entry_id] = translated
+        return translated
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Translation failed for entry {entry_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Translation failed: {str(e)}")
+    finally:
+        session.close()
+
+
 # --- Helpers ---
 
 def _entry_to_response(session, entry: Entry, lite: bool = False) -> EntryResponse:

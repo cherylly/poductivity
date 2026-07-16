@@ -771,3 +771,30 @@ body {
     flex-direction: column;
   }
 }
+
+.btn-translate {
+  background: var(--paper);
+  color: var(--ink);
+  border: 1.5px solid var(--rule);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 13px;
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-translate:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.btn-translate.active {
+  background: var(--accent);
+  color: var(--paper);
+  border-color: var(--accent);
+}
+
+.btn-translate:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}

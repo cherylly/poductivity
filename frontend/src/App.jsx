@@ -198,6 +198,9 @@ function EntryDetail() {
   const { id } = useParams()
   const { data: entry, loading } = useFetch(`${API}/entries/${id}`)
   const [bookmarked, setBookmarked] = useState(false)
+  const [translated, setTranslated] = useState(null)
+  const [translating, setTranslating] = useState(false)
+  const [showTranslation, setShowTranslation] = useState(false)
 
   useEffect(() => {
     if (entry) setBookmarked(entry.bookmarked)
@@ -211,6 +214,37 @@ function EntryDetail() {
     await fetch(`${API}/bookmarks/${id}`, { method })
     setBookmarked(!bookmarked)
   }
+
+  const handleTranslate = async () => {
+    if (translated) {
+      setShowTranslation(!showTranslation)
+      return
+    }
+    setTranslating(true)
+    try {
+      const res = await fetch(`${API}/entries/${id}/translate`, { method: 'POST' })
+      if (res.ok) {
+        const data = await res.json()
+        setTranslated(data)
+        setShowTranslation(true)
+      }
+    } catch (e) {
+      console.error('Translation failed:', e)
+    }
+    setTranslating(false)
+  }
+
+  const displayTitle = showTranslation && translated?.title ? translated.title : entry.title
+  const displaySummary = showTranslation && translated ? {
+    thesis: translated.thesis || entry.summary?.thesis,
+    key_points: (translated.key_points || entry.summary?.key_points || []).map((p, i) => {
+      const orig = entry.summary?.key_points?.[i]
+      return { ...orig, ...p }
+    }),
+    actionable_takeaways: translated.actionable_takeaways || entry.summary?.actionable_takeaways || [],
+    conclusion: translated.conclusion || entry.summary?.conclusion,
+    tags: translated.tags || entry.summary?.tags || [],
+  } : entry.summary
 
   return (
     <div className="entry-detail">
@@ -226,7 +260,7 @@ function EntryDetail() {
             <span className="transcript-badge full">Based on Full Transcript</span>
           )}
         </div>
-        <h1>{entry.title}</h1>
+        <h1>{displayTitle}</h1>
         <div className="detail-actions">
           {entry.url ? (
             <a href={entry.url} target="_blank" rel="noopener noreferrer" className="btn btn-primary">
@@ -238,20 +272,29 @@ function EntryDetail() {
           <button onClick={toggleBookmark} className={`btn btn-bookmark ${bookmarked ? 'active' : ''}`}>
             {bookmarked ? '\u2605 Clipped' : '\u2606 Clip'}
           </button>
+          {entry.summary && (
+            <button
+              onClick={handleTranslate}
+              disabled={translating}
+              className={`btn btn-translate ${showTranslation ? 'active' : ''}`}
+            >
+              {translating ? '翻译中...' : showTranslation ? '显示原文' : '翻译为中文'}
+            </button>
+          )}
         </div>
       </div>
 
-      {entry.summary && (
+      {displaySummary && (
         <div className="summary-content">
           <section className="thesis-section">
-            <h2>Abstract</h2>
-            <p className="thesis">{entry.summary.thesis}</p>
+            <h2>{showTranslation ? '摘要' : 'Abstract'}</h2>
+            <p className="thesis">{displaySummary.thesis}</p>
           </section>
 
           <section className="keypoints-section">
-            <h2>Key Highlights</h2>
+            <h2>{showTranslation ? '核心要点' : 'Key Highlights'}</h2>
             <ul className="keypoints">
-              {entry.summary.key_points.map((point, i) => (
+              {displaySummary.key_points.map((point, i) => (
                 <li key={i} className="keypoint">
                   {point.topic && <strong className="point-topic">{point.topic}</strong>}
                   {point.speaker && <span className="speaker">{point.speaker}</span>}
@@ -271,11 +314,11 @@ function EntryDetail() {
             </ul>
           </section>
 
-          {entry.summary.actionable_takeaways?.length > 0 && (
+          {displaySummary.actionable_takeaways?.length > 0 && (
             <section className="takeaways-section">
-              <h2>Actionable Takeaways</h2>
+              <h2>{showTranslation ? '行动建议' : 'Actionable Takeaways'}</h2>
               <ul className="takeaways">
-                {entry.summary.actionable_takeaways.map((t, i) => (
+                {displaySummary.actionable_takeaways.map((t, i) => (
                   <li key={i} className="takeaway-item">{t}</li>
                 ))}
               </ul>
@@ -283,13 +326,13 @@ function EntryDetail() {
           )}
 
           <section className="conclusion-section">
-            <h2>Summary</h2>
-            <p className="conclusion">{entry.summary.conclusion}</p>
+            <h2>{showTranslation ? '总结' : 'Summary'}</h2>
+            <p className="conclusion">{displaySummary.conclusion}</p>
           </section>
 
-          {entry.summary.tags?.length > 0 && (
+          {displaySummary.tags?.length > 0 && (
             <div className="tags-section">
-              {entry.summary.tags.map(tag => (
+              {displaySummary.tags.map(tag => (
                 <span key={tag} className="tag">{tag}</span>
               ))}
             </div>
