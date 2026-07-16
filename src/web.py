@@ -475,7 +475,9 @@ def _llm_translate_batch(sections: dict) -> dict:
         "Content-Type": "application/json",
         "Authorization": f"Bearer {settings.anthropic_auth_token}",
     })
-    with urllib.request.urlopen(req, timeout=60) as resp:
+    handler = urllib.request.ProxyHandler({})
+    opener = urllib.request.build_opener(handler)
+    with opener.open(req, timeout=60) as resp:
         data = json.loads(resp.read())
         content = data["choices"][0]["message"]["content"].strip()
         # Strip markdown code fences if present

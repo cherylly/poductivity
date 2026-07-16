@@ -320,7 +320,9 @@ async def translate_new_summaries(session) -> int:
         })
 
         try:
-            with urllib.request.urlopen(req, timeout=90) as resp:
+            handler = urllib.request.ProxyHandler({})
+            opener = urllib.request.build_opener(handler)
+            with opener.open(req, timeout=120) as resp:
                 data = json.loads(resp.read())
                 content = data["choices"][0]["message"]["content"].strip()
                 if content.startswith("```"):
