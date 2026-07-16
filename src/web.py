@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from src.config import settings
-from src.models import Bookmark, DailyDigest, Entry, Source, Summary, get_session, init_db
+from src.models import Bookmark, DailyDigest, DailyQuestions, Entry, Source, Summary, get_session, init_db
 
 logger = logging.getLogger(__name__)
 
@@ -472,17 +472,111 @@ class QuestionItem(BaseModel):
 @app.get("/api/thinking/questions", response_model=List[QuestionItem])
 async def get_questions():
     """获取今日面试问题"""
-    # 每天随机选择3个问题
-    today = date.today()
-    random.seed(today.toordinal())
-    return random.sample(INTERVIEW_QUESTIONS, 3)
+    session = get_session()
+    try:
+        today = date.today()
+        # 检查是否已有今日问题记录
+        record = session.query(DailyQuestions).filter(
+            DailyQuestions.question_date == today
+        ).first()
+
+        if record:
+            questions = record.get_questions()
+            return [QuestionItem(**q) for q in questions]
+
+        # 生成新问题并保存
+        random.seed(today.toordinal())
+        selected = random.sample(INTERVIEW_QUESTIONS, 3)
+
+        # 保存到数据库
+        new_record = DailyQuestions(question_date=today)
+        new_record.set_questions(selected)
+        session.add(new_record)
+        session.commit()
+
+        return [QuestionItem(**q) for q in selected]
+    finally:
+        session.close()
 
 
 @app.post("/api/thinking/generate", response_model=List[QuestionItem])
 async def generate_questions():
-    """生成新的面试问题"""
-    # 随机选择3个问题
-    return random.sample(INTERVIEW_QUESTIONS, 3)
+    """生成新的面试问题（仅当今日还没有问题时）"""
+    session = get_session()
+    try:
+        today = date.today()
+        # 检查是否已有今日问题记录
+        record = session.query(DailyQuestions).filter(
+            DailyQuestions.question_date == today
+        ).first()
+
+        if record:
+            # 返回已存在的问题
+            questions = record.get_questions()
+            return [QuestionItem(**q) for q in questions]
+
+        # 生成新问题并保存
+        random.seed(today.toordinal())
+        selected = random.sample(INTERVIEW_QUESTIONS, 3)
+
+        # 保存到数据库
+        new_record = DailyQuestions(question_date=today)
+        new_record.set_questions(selected)
+        session.add(new_record)
+        session.commit()
+
+        return [QuestionItem(**q) for q in selected]
+    finally:
+        session.close()
+
+
+class DailyQuestionsResponse(BaseModel):
+    date: str
+    questions: List[QuestionItem]
+
+
+@app.get("/api/thinking/history", response_model=List[DailyQuestionsResponse])
+async def get_question_history(limit: int = 30):
+    """获取历史问题记录"""
+    session = get_session()
+    try:
+        records = session.query(DailyQuestions).order_by(
+            DailyQuestions.question_date.desc()
+        ).limit(limit).all()
+
+        result = []
+        for r in records:
+            questions = r.get_questions()
+            result.append(DailyQuestionsResponse(
+                date=str(r.question_date),
+                questions=[QuestionItem(**q) for q in questions]
+            ))
+
+        return result
+    finally:
+        session.close()
+
+
+@app.get("/api/thinking/history/{date_str}", response_model=DailyQuestionsResponse)
+async def get_questions_by_date(date_str: str):
+    """获取指定日期的问题"""
+    session = get_session()
+    try:
+        target_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+        record = session.query(DailyQuestions).filter(
+            DailyQuestions.question_date == target_date
+        ).first()
+
+        if not record:
+            raise HTTPException(status_code=404, detail="No questions found for this date")
+
+        questions = record.get_questions()
+        return DailyQuestionsResponse(
+            date=str(record.question_date),
+            questions=[QuestionItem(**q) for q in questions]
+        )
+    finally:
+        session.close()
 
 
 # --- Helpers ---

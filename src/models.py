@@ -117,6 +117,22 @@ class DailyDigest(Base):
         self.entry_ids = json.dumps(ids)
 
 
+class DailyQuestions(Base):
+    """每日面试问题记录"""
+    __tablename__ = "daily_questions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    question_date = Column(Date, nullable=False, unique=True)
+    questions_json = Column(Text, nullable=False)  # JSON array of questions
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    def get_questions(self) -> list[dict]:
+        return json.loads(self.questions_json) if self.questions_json else []
+
+    def set_questions(self, questions: list[dict]):
+        self.questions_json = json.dumps(questions, ensure_ascii=False)
+
+
 def get_engine():
     db_url = f"sqlite:///{settings.db_path}"
     return create_engine(db_url, echo=False)
