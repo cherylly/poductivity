@@ -222,17 +222,40 @@ function EntryDetail() {
     }
     setTranslating(true)
     try {
-      const res = await fetch(`${API}/entries/${id}/translate`, { method: 'POST' })
-      if (res.ok) {
-        const data = await res.json()
-        setTranslated(data)
-        setShowTranslation(true)
-      } else {
-        alert('翻译失败，请稍后重试')
+      const s = entry.summary
+      const textsToTranslate = [
+        entry.title,
+        s.thesis || '',
+        s.conclusion || '',
+        ...(s.key_points || []).map(p => p.topic || ''),
+        ...(s.key_points || []).map(p => p.text || ''),
+        ...(s.actionable_takeaways || []),
+        ...(s.tags || []),
+      ]
+      const results = await translateBatch(textsToTranslate)
+
+      let idx = 0
+      const kpCount = (s.key_points || []).length
+      const taCount = (s.actionable_takeaways || []).length
+      const tagCount = (s.tags || []).length
+
+      const data = {
+        title: results[idx++],
+        thesis: results[idx++],
+        conclusion: results[idx++],
+        key_points: (s.key_points || []).map((p, i) => ({
+          topic: results[idx + i],
+          text: results[idx + kpCount + i],
+          timestamp: p.timestamp || '',
+        })),
+        actionable_takeaways: results.slice(idx + kpCount * 2, idx + kpCount * 2 + taCount),
+        tags: results.slice(idx + kpCount * 2 + taCount, idx + kpCount * 2 + taCount + tagCount),
       }
+      setTranslated(data)
+      setShowTranslation(true)
     } catch (e) {
       console.error('Translation failed:', e)
-      alert('翻译请求失败，请检查网络连接')
+      alert('翻译失败，请确保网络可以访问 Google 翻译')
     }
     setTranslating(false)
   }
@@ -472,6 +495,15 @@ function Sources() {
       </div>
     </div>
   )
+}
+
+async function translateBatch(texts) {
+  const combined = texts.join('\n---SPLIT---\n')
+  const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=zh-CN&dt=t&q=${encodeURIComponent(combined)}`
+  const res = await fetch(url)
+  const data = await res.json()
+  const full = data[0].map(seg => seg[0]).join('')
+  return full.split('---SPLIT---').map(s => s.trim())
 }
 
 function getTimestampLink(url, timestamp) {
